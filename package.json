@@ -1,0 +1,21 @@
+{
+  "name": "cod-reconciliation-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types",
+    "verify:ladder": "node scripts/verify-ladder.ts",
+    "db:migrate:local": "wrangler d1 migrations apply cod-recon --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cod-recon --remote",
+    "check": "npm run verify:ladder && npm run typecheck"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260820.1",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.125.0"
+  }
+}

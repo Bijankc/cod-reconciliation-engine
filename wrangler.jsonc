@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cod-reconciliation-engine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Ingestion (Zone 1) — at-least-once, out-of-order tolerant.
+  "queues": {
+    "producers": [{ "binding": "COURIER_QUEUE", "queue": "courier-events" }],
+    "consumers": [
+      {
+        "queue": "courier-events",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "courier-events-dlq"
+      }
+    ]
+  },
+
+  // Ledger (Zone 2) — CP. One single-threaded Durable Object per order.
+  "durable_objects": {
+    "bindings": [{ "name": "ORDER_LEDGER", "class_name": "OrderLedger" }]
+  },
+  "migrations": [
+    // SQLite-backed DO classes are the only backend available on the free plan.
+    { "tag": "v1", "new_sqlite_classes": ["OrderLedger"] }
+  ],
+
+  // Read model (Zone 3) — AP. Eventually-consistent projection for the dashboard.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cod-recon",
+      "database_id": "PLACEHOLDER_SET_BY_WRANGLER_D1_CREATE",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Immutable audit log — raw courier payloads, write-once.
+  "r2_buckets": [{ "binding": "AUDIT", "bucket_name": "cod-recon-audit" }]
+}
