@@ -13,8 +13,8 @@
  *      spawn a phantom ledger holding real money.
  *   4. Otherwise record the event against the order.
  *
- * PHASE 2: step 4 records outcome='received' and stops there. Phase 3 replaces it
- * with the OrderLedger call and the real verdict.
+ * PHASE 3: step 4 calls the OrderLedger Durable Object and records its verdict.
+ * The 'received' placeholder Phase 2 wrote is no longer reachable on this path.
  *
  * Failure posture: transient failures (a D1 or R2 hiccup) throw, so the Queue
  * retries with backoff — at-least-once delivery is the whole point, and the DO's
@@ -79,14 +79,25 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
     return "orphan";
   }
 
-  // 4. Record it against the order. Phase 3 calls the ledger here and replaces
-  //    'received' with the DO's verdict.
-  //    INSERT OR IGNORE, not INSERT: at-least-once means this message may be a
-  //    redelivery of one already recorded, and event_id is the primary key.
+  // 4. Route to the ledger. idFromName is deterministic, so every event for this
+  //    order reaches the SAME single-threaded instance — that is what makes the
+  //    lost update impossible. Reached only after the existence check above:
+  //    naming a DO is what brings it into being, so an unverified order_id must
+  //    never get this far.
+  const id = env.ORDER_LEDGER.idFromName(event.order_id);
+  const ledger = env.ORDER_LEDGER.get(id);
+  const result = await ledger.applyEvent(event, order.cod_amount);
+
+  // 5. Record the event with the ledger's REAL verdict — applied, duplicate,
+  //    buffered or anomaly. Written once, in a single insert; 'received' is
+  //    never written on this path, so a row can never be left holding a
+  //    verdict-pending placeholder after the ledger has ruled.
+  //    INSERT OR IGNORE because at-least-once means this may be a redelivery,
+  //    and event_id is the primary key.
   await env.DB.prepare(
     `INSERT OR IGNORE INTO order_events
        (event_id, order_id, type, amount, occurred_at, received_at, outcome, courier_id, raw_r2_key)
-     VALUES (?, ?, ?, ?, ?, ?, 'received', ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       event.event_id,
@@ -95,16 +106,19 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       event.amount ?? null,
       event.occurred_at,
       receivedAt,
+      result.outcome,
       event.courier_id ?? null,
       key,
     )
     .run();
 
   console.log(
-    `[received] ${event.type} ${event.event_id} order=${event.order_id} cod=${order.cod_amount}` +
-      (event.amount !== undefined ? ` amount=${event.amount}` : ""),
+    `[${result.outcome}] ${event.type} ${event.event_id} order=${event.order_id} ` +
+      `status=${result.state.status} collected=${result.state.amount_collected}/${result.state.cod_amount} ` +
+      `recon=${result.state.reconciliation_status} v=${result.state.version}` +
+      (result.drained > 0 ? ` drained=${result.drained}` : ""),
   );
-  return "received";
+  return result.outcome;
 }
 
 export async function consumeBatch(

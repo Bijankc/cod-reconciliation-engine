@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "types": "wrangler types",
     "verify:ladder": "node scripts/verify-ladder.ts",
+    "assert:no-phantom": "node scripts/assert-no-phantom-ledger.mjs",
     "db:migrate:local": "wrangler d1 migrations apply cod-recon --local",
     "db:migrate:remote": "wrangler d1 migrations apply cod-recon --remote",
     "check": "npm run verify:ladder && npm run typecheck"

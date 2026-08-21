@@ -26,7 +26,7 @@ export { OrderLedger } from "./durable-objects/order-ledger.ts";
 function health(env: Env): Response {
   return json({
     service: "cod-reconciliation-engine",
-    phase: 2,
+    phase: 3,
     status: "ok",
     currency: CURRENCY.code,
     amount_unit: CURRENCY.label,

@@ -191,6 +191,48 @@ duration, and SQLite storage billed at D1 row rates since 2026-01-07 — which i
 surfaced the per-RPC-call billing rule that makes the shared 100,000 requests/day ceiling,
 not storage, the real constraint on this design.
 
+### 7. The webhook answers `401`, and that is a contract
+
+**Question.** Spec §5.1 calls the bearer check a "simple auth gesture" and pins no status
+code. Unpinned, it would drift — one handler returning `403`, a later one silently dropping
+the event, and a frontend guessing which.
+
+**Decision.** **`401 Unauthorized` with a `WWW-Authenticate: Bearer` header** for both a
+missing and a wrong credential, and it is treated as a fixed contract, not an implementation
+detail. `401` is the semantically correct answer: the request was not authenticated. `403`
+would claim the caller *was* identified and then denied, which is a different and untrue
+statement. Silently dropping would be worst of all — a courier that cannot tell rejection
+from acceptance retries blindly, and blind retries are how duplicate events get made.
+
+Missing and wrong credentials deliberately return the **same** status and body: telling an
+unauthenticated caller which of the two it got is free reconnaissance.
+
+The consequence to hold onto: **the simulator, the test scripts and the frontend all expect
+`401`.** A future change to `403` or to a silent drop is a breaking change to that contract,
+not a refactor.
+
+**Verified:** requests with no `Authorization` header and with a wrong bearer token both
+return `401`; neither reaches the queue.
+
+### 8. Decision 5 is asserted, not assumed
+
+The `orphan_events` row proves the orphan path *ran*. It does not prove the property that
+actually protects money: that `idFromName("ord_ghost")` never brought a Durable Object into
+existence. A phantom ledger would be **silent** — no error, no log line, just a DO accruing
+cash against an order no merchant can see. "True by construction" is exactly the kind of
+claim that stops being true during a refactor and tells no one.
+
+`npm run assert:no-phantom` (`scripts/assert-no-phantom-ledger.mjs`) closes that gap. It
+snapshots the live Durable Object instances, fires a `payment_collected` for an order that
+was never created, waits for the consumer, and then asserts five things: the webhook
+accepted it (202), an `orphan_events` row exists carrying its R2 audit key, **no** `orders`
+row appeared, **no** `order_events` row appeared, and — the assertion that matters — **no
+new Durable Object instance came into existence.** It exits non-zero otherwise.
+
+The instance list comes from the local dev server's inspector
+(`/cdn-cgi/local/explorer/api/workers/durable_objects/namespaces/{ns}/objects`), which
+enumerates real DO instances rather than inferring them.
+
 ---
 
 ## The three consistency zones
@@ -263,6 +305,26 @@ verification when a Cloudflare account exists.
 | 5 | **Production secret** — `COURIER_SHARED_SECRET` via `wrangler secret put` | Only `.dev.vars` has been exercised | `wrangler secret put`, then confirm the webhook still 401s on a wrong bearer |
 | 6 | **Batching and consumer concurrency** under real load | Local batching does not reproduce production scheduling or backpressure | Fire a burst; observe `max_batch_size` / concurrency behaviour |
 | 7 | **Free-tier limits in practice** | Nothing has been metered against a real account | Watch the dashboard's usage panel during a demo run |
+
+### Hard rule: `0001_init.sql` freezes the moment it is applied with `--remote`
+
+Migration `0001` has been edited in place twice — folding in `discrepancy_reason`,
+`orphan_events`, and later the `'received'` outcome. That was safe **only** because it had
+never been applied anywhere but a local emulated database that can be dropped and rebuilt at
+will.
+
+**The instant `wrangler d1 migrations apply cod-recon --remote` succeeds, `0001` is frozen.**
+From that point every schema change is a NEW migration file — `0002_*.sql`, `0003_*.sql` —
+and editing `0001` is never again an option, no matter how small the change. A remote D1 has
+already recorded `0001` as applied in `d1_migrations`; editing the file afterwards does not
+re-run it, so the file and the live schema silently diverge and every future migration is
+built on a schema that does not exist.
+
+SQLite makes this sharper than it sounds: it cannot `ALTER` a `CHECK` constraint, so a
+change like adding a sixth `reconciliation_status` requires a full table rebuild —
+create-new, copy, drop-old, rename — written as its own migration. "Just fold it into
+`0001`" is a local-only convenience with a hard expiry date, and this line is that expiry
+date written down.
 
 **The honest status of the DLQ, specifically.** It is *configured* in `wrangler.jsonc` and
 the consumer's failure path is written to trigger it — `message.retry()` on a transient
