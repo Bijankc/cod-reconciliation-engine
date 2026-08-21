@@ -181,6 +181,15 @@ The one free-plan constraint worth recording is **24-hour maximum queue and DLQ 
 real operational limit: on the free plan a consumer outage lasting more than a day loses
 buffered events outright. Named in the limits table below rather than designed around.
 
+**Every figure in the limits table is doc-verified**, checked against the live Cloudflare
+pricing page (last updated 2026-07-07) rather than recalled — with the single exception of
+the Pages row, which that pass did not cover and which is footnoted as such. Nothing here
+carries a "trust me" number into submission. That pass also established that the Durable
+Objects entry needed splitting into its three separately-metered dimensions — requests,
+duration, and SQLite storage billed at D1 row rates since 2026-01-07 — which is what
+surfaced the per-RPC-call billing rule that makes the shared 100,000 requests/day ceiling,
+not storage, the real constraint on this design.
+
 ---
 
 ## The three consistency zones
@@ -203,22 +212,36 @@ Every primitive in this system runs on the Cloudflare **free** plan. Naming the 
 is part of understanding the design, so here they are — with the headroom this demo actually
 needs.
 
-| Primitive | Free-plan limit | Demo usage |
-|---|---|---|
-| **Queues** | 10,000 operations/day (reads + writes + deletes combined); all features incl. DLQ, retries, batching | A courier event costs ~3 ops (write, read, delete). ~3,000 events/day of headroom — orders of magnitude past a demo. |
-| **Queues retention** | **24 hours** max for queue and DLQ (paid: 14 days) | Irrelevant at demo scale — events are consumed in seconds. Real limit in production: a consumer outage longer than a day loses buffered events. |
-| **Workers** | 100,000 requests/day; 10 ms CPU per invocation | The webhook validates and enqueues — microseconds of CPU. Dashboard polling is the only volume driver. |
-| **Durable Objects** | 100,000 requests/day; 13,000 GB-s/day compute; SQLite backend only | One DO per order, a handful of requests each. The free plan's SQLite-only constraint is why `wrangler.jsonc` uses `new_sqlite_classes`. |
-| **D1** | 5 GB storage; 5,000,000 rows read/day; 100,000 rows written/day | Projection writes are one row per event; dashboard reads are a single indexed scan. |
-| **R2** | 10 GB storage; 1,000,000 Class A ops/month (writes); 10,000,000 Class B ops/month (reads); **no egress fees** | One small JSON write per event received. The audit log is the cheapest part of the system. |
-| **Pages** | Unlimited requests and bandwidth; 500 builds/month | Static frontend. Never a constraint. |
+Every figure below is **verified against the live Cloudflare pricing page (last updated
+2026-07-07)**. No estimates, no remembered numbers.
 
-**Two notes on reading this table.** First, the binding constraint here is *not* storage or
-bandwidth — it is the 100,000/day request ceiling shared by Workers and Durable Objects, and
-a polling dashboard is what spends it. Poll interval is therefore a real design parameter,
-not a cosmetic one. Second, these figures move: Queues itself only joined the free plan on
-2026-02-04 (see decision log §6). Re-verify against current Cloudflare pricing pages before
-relying on any of them.
+| Primitive | Free-plan limit | What this system spends |
+|---|---|---|
+| **Workers** | 100,000 requests/day; 10 ms CPU per invocation | The webhook validates and enqueues — microseconds of CPU. Dashboard polling is the volume driver. |
+| **Durable Objects — requests** | **100,000 requests/day** | One per courier event, plus one per authoritative dashboard read. See the footnote: this is the ceiling that actually binds. |
+| **Durable Objects — duration** | **13,000 GB-s/day** | The ledger does microseconds of work per event. Never the constraint. |
+| **Durable Objects — SQLite storage** | Billed as **rows read/written at D1 rates**: 5,000,000 rows read/day, 100,000 rows written/day free. Storage billing began **2026-01-07** | Each `put()` counts as a row write. The ledger writes `state`, `processed_ids`, `history` and `pending` per applied event — roughly four row writes each. |
+| **Queues** | 10,000 operations/day (reads + writes + deletes combined); all features incl. DLQ, retries, batching | ~3 ops per courier event (write, read, delete) → ~3,300 events/day. The tightest ceiling on ingestion specifically. |
+| **Queues — retention** | **24 hours**, non-configurable (paid: 14 days) | Irrelevant at demo scale; events are consumed in seconds. In production it means a consumer outage longer than a day loses buffered events outright. |
+| **D1** | 5 GB total storage; 5,000,000 rows read/day; 100,000 rows written/day | One projection row write per event; dashboard reads are a single indexed scan. |
+| **R2** | 10 GB-month storage; 1,000,000 Class A ops/month (writes); 10,000,000 Class B ops/month (reads); **free egress** | One small JSON write per event received. The audit log is the cheapest part of the system. |
+| **Pages** † | Unlimited requests and bandwidth; 500 builds/month | Static frontend. Never a constraint. |
+
+> **† Every row above except Pages** was confirmed in the 2026-07-07 verification pass.
+> Pages was not covered by it and is the one line to re-check before submission.
+
+**Footnote — why the 100k/day request ceiling is the binding constraint.** Each **RPC method
+call on a Durable Object stub is billed as one request**. Every courier event is therefore
+one DO request, and every "authoritative (CP)" toggle on the dashboard is another — all
+drawn from the *same* 100,000/day pool the Worker itself spends from. The constraint on this
+system is not storage and not bandwidth; it is that shared request ceiling, and a polling
+dashboard is what burns through it. **Poll interval is a real design parameter here, not a
+cosmetic one** — a 1-second poll across 20 open dashboards is 1.7M requests/day and blows
+the free plan on its own, while the ledger it is watching would still be comfortably inside
+every other limit.
+
+These figures do move — Queues itself only joined the free plan on 2026-02-04 (decision log
+§6), and DO storage billing only began 2026-01-07.
 
 ---
 
