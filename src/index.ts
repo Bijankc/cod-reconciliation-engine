@@ -3,12 +3,13 @@
  *
  * Async AP ingestion -> CP ledger -> eventually-consistent reads.
  *
- * PHASE 1: the merchant order API is live against D1. The webhook and queue
- * consumer arrive in Phase 2, the ledger in Phase 3, the projection in Phase 4.
+ * PHASE 2: the merchant order API, the courier webhook, and the queue consumer
+ * writing to the R2 audit log. The ledger arrives in Phase 3, the projection in
+ * Phase 4.
  */
 
 import type { Env } from "./env.d.ts";
-import type { CourierEvent } from "./shared/types.ts";
+import type { QueuedCourierEvent } from "./shared/types.ts";
 import {
   CURRENCY,
   CURRENT_SCHEMA_VERSION,
@@ -17,13 +18,15 @@ import {
 } from "./shared/constants.ts";
 import { json, notFound, methodNotAllowed } from "./shared/http.ts";
 import { createOrder, listOrders, getOrder } from "./api/orders.ts";
+import { courierWebhook } from "./api/webhook.ts";
+import { consumeBatch } from "./consumer.ts";
 
 export { OrderLedger } from "./durable-objects/order-ledger.ts";
 
 function health(env: Env): Response {
   return json({
     service: "cod-reconciliation-engine",
-    phase: 1,
+    phase: 2,
     status: "ok",
     currency: CURRENCY.code,
     amount_unit: CURRENCY.label,
@@ -55,6 +58,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     return methodNotAllowed(["GET", "POST"]);
   }
 
+  if (path === "/webhook/courier") {
+    if (method !== "POST") return methodNotAllowed(["POST"]);
+    return courierWebhook(request, env);
+  }
+
   const orderDetail = /^\/api\/orders\/([^/]+)$/.exec(path);
   if (orderDetail) {
     if (method !== "GET") return methodNotAllowed(["GET"]);
@@ -75,12 +83,7 @@ export default {
     }
   },
 
-  async queue(batch: MessageBatch<CourierEvent>, _env: Env): Promise<void> {
-    // Phase 2 wires this up: R2 audit write, order-existence check, DO call,
-    // D1 projection. For now acking keeps nothing accumulating in the queue.
-    for (const message of batch.messages) {
-      console.log(`[phase1] received event ${message.body?.event_id ?? "?"}`);
-      message.ack();
-    }
+  async queue(batch: MessageBatch<QueuedCourierEvent>, env: Env): Promise<void> {
+    await consumeBatch(batch, env);
   },
-} satisfies ExportedHandler<Env, CourierEvent>;
+} satisfies ExportedHandler<Env, QueuedCourierEvent>;

@@ -120,7 +120,14 @@ export const DISCREPANCY_REASON_TEXT: Record<DiscrepancyReason, string> = {
 // Per-event processing outcome (recorded in D1 order_events)
 // ---------------------------------------------------------------------------
 
-export const EVENT_OUTCOMES = ["applied", "duplicate", "buffered", "anomaly"] as const;
+export const EVENT_OUTCOMES = [
+  /** Audited to R2 and registered, ledger verdict not yet determined (Phase 2). */
+  "received",
+  "applied",
+  "duplicate",
+  "buffered",
+  "anomaly",
+] as const;
 export type EventOutcome = (typeof EVENT_OUTCOMES)[number];
 
 /** Why an event was orphaned. Decision 5: today there is exactly one reason. */

@@ -9,7 +9,9 @@ converges every order onto a single money-truth.
 
 > **Async AP ingestion → CP ledger → eventually-consistent reads.**
 
-**Build status:** Phase 0 complete (scaffold, bindings, schema). Phases 1–6 pending.
+**Build status:** Phases 0–2 complete (scaffold, schema, order API, webhook → queue → R2
+audit). Phases 3–6 pending. **Everything so far is verified against local emulation only** —
+see [Deferred to deploy](#deferred-to-deploy-not-yet-verified-against-real-resources).
 
 ---
 
@@ -241,12 +243,45 @@ These figures do move — Queues itself only joined the free plan on 2026-02-04 
 
 ---
 
+## Deferred to deploy (not yet verified against real resources)
+
+Development so far has run entirely on **local emulation** — `wrangler dev` with local D1,
+R2, Queues and Durable Objects. Local emulation is faithful enough to prove application
+logic, and everything below the line has been proven that way. But it is a simulation of the
+platform, not the platform, and a few claims this README makes are precisely the ones it
+cannot settle. Those are listed here rather than quietly assumed, so nothing skips
+verification when a Cloudflare account exists.
+
+**Claims local emulation cannot prove — do not present these as working until checked:**
+
+| # | Claim | Why local can't settle it | How to verify once deployed |
+|---|---|---|---|
+| 1 | **Dead-letter queue** — poison messages land in `courier-events-dlq` instead of blocking the pipeline | The local queue emulator does not exercise a real DLQ hand-off after `max_retries` | Force a consumer throw, watch a message exhaust 5 retries, then confirm it appears in the DLQ |
+| 2 | **Retry with backoff** — transient failures are retried, with real backoff timing | Local retry timing is not the production scheduler | Induce a transient D1 failure; observe retry spacing and eventual success |
+| 3 | **`d1 migrations apply --remote`** | Only ever applied to a local emulated D1 | Run against the real database; confirm all three tables and every CHECK constraint materialise |
+| 4 | **Resource creation** — `d1 create`, `r2 bucket create`, `queues create` ×2 | No account; `database_id` in `wrangler.jsonc` is still a placeholder | Create all four, paste the real `database_id`, redeploy |
+| 5 | **Production secret** — `COURIER_SHARED_SECRET` via `wrangler secret put` | Only `.dev.vars` has been exercised | `wrangler secret put`, then confirm the webhook still 401s on a wrong bearer |
+| 6 | **Batching and consumer concurrency** under real load | Local batching does not reproduce production scheduling or backpressure | Fire a burst; observe `max_batch_size` / concurrency behaviour |
+| 7 | **Free-tier limits in practice** | Nothing has been metered against a real account | Watch the dashboard's usage panel during a demo run |
+
+**The honest status of the DLQ, specifically.** It is *configured* in `wrangler.jsonc` and
+the consumer's failure path is written to trigger it — `message.retry()` on a transient
+failure, `max_retries: 5`, `dead_letter_queue: courier-events-dlq`. That is a wiring claim,
+and wiring is all that has been demonstrated. **The DLQ demo has not been run against a real
+queue and must not be described as working until it has been.**
+
+---
+
 ## Layout
 
 ```
 src/shared/constants.ts       Single source of truth: units, enums, derived unions
 src/shared/reconciliation.ts  The total ladder (pure function, no I/O)
-src/shared/types.ts           CourierEvent, LedgerState
+src/shared/types.ts           CourierEvent, QueuedCourierEvent, LedgerState
+src/shared/validate-event.ts  Webhook validation — forward-compatible by design
+src/api/orders.ts             Merchant order API (Phase 1)
+src/api/webhook.ts            POST /webhook/courier — auth, validate, enqueue, 202
+src/consumer.ts               Queue consumer — R2 audit, orphan path, event rows
 src/durable-objects/          OrderLedger — the CP write model (Phase 3)
 src/index.ts                  Worker: API, webhook, queue consumer
 migrations/0001_init.sql      D1 schema, all decisions folded in
@@ -261,5 +296,9 @@ npm run verify:ladder      # the 28-cell totality proof, alone
 npm run dev                # local Worker with all four bindings
 npm run db:migrate:local   # apply migrations to local D1
 npm run db:migrate:remote  # apply migrations to remote D1
-npm run deploy             # wrangler deploy
+npm run deploy             # wrangler deploy (needs an account)
+
+# inspect the local R2 audit log
+curl -s localhost:8788/cdn-cgi/local/explorer/api/r2/buckets/cod-recon-audit/objects
+npx wrangler r2 object get cod-recon-audit/events/<order_id>/<event_id>.json --local --pipe
 ```

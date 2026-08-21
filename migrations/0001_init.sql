@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS order_events (
   occurred_at  TEXT,                        -- courier's clock
   received_at  TEXT NOT NULL,               -- our clock
   outcome      TEXT NOT NULL
-                 CHECK (outcome IN ('applied','duplicate','buffered','anomaly')),
+                 CHECK (outcome IN ('received','applied','duplicate','buffered','anomaly')),
   courier_id   TEXT,
   raw_r2_key   TEXT,                        -- pointer into the R2 audit log
   FOREIGN KEY (order_id) REFERENCES orders(order_id)

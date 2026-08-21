@@ -17,6 +17,16 @@ export interface CourierEvent {
   schema_version: number;
 }
 
+/**
+ * What actually travels on the Queue: the validated event plus the verbatim
+ * request body, so the consumer can write the original bytes to R2 without
+ * re-serialising and silently dropping unknown fields from a future schema
+ * version (spec section 9, additive-only evolution).
+ */
+export interface QueuedCourierEvent extends CourierEvent {
+  raw: string;
+}
+
 /** The DO's authoritative state, and the shape projected into D1. */
 export interface LedgerState {
   order_id: string;

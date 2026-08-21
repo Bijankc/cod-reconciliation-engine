@@ -1,10 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import type { CourierEvent } from "./shared/types.ts";
+import type { QueuedCourierEvent } from "./shared/types.ts";
 
 export interface Env {
   /** Ingestion buffer. The webhook is a producer; the consumer drains it. */
-  COURIER_QUEUE: Queue<CourierEvent>;
+  COURIER_QUEUE: Queue<QueuedCourierEvent>;
   /** One Durable Object per order — the authoritative, strongly-consistent ledger. */
   ORDER_LEDGER: DurableObjectNamespace;
   /** Read model + order registry. */
