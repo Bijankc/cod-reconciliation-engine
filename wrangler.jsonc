@@ -22,6 +22,20 @@
         "max_batch_timeout": 5,
         "max_retries": 5,
         "dead_letter_queue": "courier-events-dlq"
+      },
+      // The DLQ has its OWN consumer. Without one, a dead-lettered message sits
+      // in a queue nobody reads and expires after the 24h retention window --
+      // configuring a DLQ and never draining it is a way of losing messages
+      // slightly more slowly. This consumer records each one in D1 so a poison
+      // event becomes a queryable fact instead of a log line that scrolls away.
+      //
+      // max_retries: 1 -- there is no third queue to fall through to, so retrying
+      // a failed DLQ write repeatedly would just burn the retention window.
+      {
+        "queue": "courier-events-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 1
       }
     ]
   },

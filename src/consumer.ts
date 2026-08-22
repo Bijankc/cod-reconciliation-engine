@@ -34,6 +34,7 @@
 
 import type { Env } from "./env.d.ts";
 import type { QueuedCourierEvent } from "./shared/types.ts";
+import { isPoisonEvent } from "./shared/constants.ts";
 import { projectToD1 } from "./projection.ts";
 
 /** R2 key layout, per spec 7.3. Immutable, write-once. */
@@ -60,6 +61,20 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       received_at: receivedAt,
     },
   });
+
+  // 1b. The poison path (Phase 6). Deliberately AFTER the audit write, so the
+  //     invariant above still holds: everything received leaves evidence, even
+  //     the messages designed to fail. Every retry re-writes the same R2 key
+  //     with the same bytes, which is why write-once and at-least-once coexist.
+  //
+  //     This throw is what makes the dead-letter queue demonstrable. It fails
+  //     identically on every attempt, so the message exhausts max_retries and
+  //     Queues hands it to courier-events-dlq. A DLQ that has never received
+  //     anything is a config claim; this is how it becomes a mechanism you can
+  //     point at.
+  if (isPoisonEvent(event.courier_id)) {
+    throw new Error(`poison event ${event.event_id}: deliberate failure for the DLQ demo`);
+  }
 
   // 2. Existence check + cod_amount in a single read.
   const order = await env.DB.prepare(`SELECT order_id, cod_amount FROM orders WHERE order_id = ?`)

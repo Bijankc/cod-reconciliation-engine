@@ -3,7 +3,7 @@
  *
  * Async AP ingestion -> CP ledger -> eventually-consistent reads.
  *
- * PHASE 5: all three zones are wired end to end. The webhook validates and
+ * PHASE 4: all three zones are now wired end to end. The webhook validates and
  * enqueues (AP ingestion), the consumer audits to R2 and drives the OrderLedger
  * Durable Object (CP), and the ledger's state is projected into D1 behind a
  * version guard for the dashboard to read (eventually consistent).
@@ -31,6 +31,8 @@ import { createOrder, listOrders, getOrder } from "./api/orders.ts";
 import { getOrderAudit } from "./api/audit.ts";
 import { courierWebhook } from "./api/webhook.ts";
 import { consumeBatch } from "./consumer.ts";
+import { consumeDeadLetters } from "./dead-letters.ts";
+import { listDeadLetters } from "./api/dead-letters.ts";
 
 export { OrderLedger } from "./durable-objects/order-ledger.ts";
 
@@ -48,7 +50,7 @@ export { OrderLedger } from "./durable-objects/order-ledger.ts";
 function health(env: Env): Response {
   return json({
     service: "cod-reconciliation-engine",
-    phase: 5,
+    phase: 6,
     status: "ok",
     currency: CURRENCY,
     schema_version: CURRENT_SCHEMA_VERSION,
@@ -81,6 +83,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (method === "POST") return createOrder(request, env);
     if (method === "GET") return listOrders(request, env);
     return methodNotAllowed(["GET", "POST"]);
+  }
+
+  if (path === "/api/dead-letters") {
+    if (method !== "GET") return methodNotAllowed(["GET"]);
+    return listDeadLetters(env);
   }
 
   if (path === "/webhook/courier") {
@@ -129,7 +136,18 @@ export default {
     return withCors(response, request, env);
   },
 
+  /**
+   * One handler, two queues. `batch.queue` is what distinguishes them, and the
+   * two paths have deliberately OPPOSITE failure postures: the main consumer
+   * throws so the queue retries, while the dead-letter consumer acks
+   * unconditionally because there is nowhere left to send a message that fails
+   * at the end of the line.
+   */
   async queue(batch: MessageBatch<QueuedCourierEvent>, env: Env): Promise<void> {
+    if (batch.queue === "courier-events-dlq") {
+      await consumeDeadLetters(batch, env);
+      return;
+    }
     await consumeBatch(batch, env);
   },
 } satisfies ExportedHandler<Env, QueuedCourierEvent>;

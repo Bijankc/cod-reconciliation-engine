@@ -133,6 +133,29 @@ export const DISCREPANCY_REASON_TEXT: Record<DiscrepancyReason, string> = {
 export const EVENT_OUTCOMES = ["applied", "buffered", "anomaly"] as const;
 export type EventOutcome = (typeof EVENT_OUTCOMES)[number];
 
+// ---------------------------------------------------------------------------
+// The poison path (Phase 6) — a deliberate way to make the DLQ demonstrable.
+// ---------------------------------------------------------------------------
+
+/**
+ * A courier_id that makes the queue consumer throw on every attempt, forever.
+ *
+ * A dead-letter queue that has never received anything is a configuration
+ * claim, not a working mechanism. Proving it needs a message that fails
+ * repeatably and predictably, and the honest way to get one is to build the
+ * failure in on purpose rather than wait for a real bug.
+ *
+ * It is a `courier_id` rather than a special event type because it must survive
+ * validation untouched: the point is a message that is perfectly WELL-FORMED and
+ * still cannot be processed. A malformed payload is rejected at the webhook with
+ * a 400 and never reaches the queue at all, so it could never demonstrate this.
+ */
+export const POISON_COURIER_ID = "sim-poison";
+
+export function isPoisonEvent(courierId: string | undefined): boolean {
+  return courierId === POISON_COURIER_ID;
+}
+
 /** Why an event was orphaned. Decision 5: today there is exactly one reason. */
 export const ORPHAN_REASONS = ["UNKNOWN_ORDER"] as const;
 export type OrphanReason = (typeof ORPHAN_REASONS)[number];

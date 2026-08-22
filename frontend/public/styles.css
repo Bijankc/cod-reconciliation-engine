@@ -1008,3 +1008,18 @@ main {
   color: var(--ink-faint);
   border-left-color: transparent;
 }
+
+/* --- Dead-letter panel ---------------------------------------------------- */
+.dlq {
+  border-left: 3px solid var(--flag);
+  margin-bottom: 1.25rem;
+}
+
+.dlq__body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.dlq .held-list li {
+  background: var(--flag-wash);
+  border-left-color: var(--flag);
+}

@@ -263,10 +263,64 @@ function renderOrders(orders) {
     .join("");
 }
 
+/**
+ * Dead letters, shown only when there are any.
+ *
+ * An empty panel that says "no poison events" every day forever is noise; the
+ * absence of dead letters is the normal case and does not need reporting. When
+ * one does appear it deserves to be impossible to miss, which is why this
+ * mounts above the order table rather than below it.
+ */
+function renderDeadLetters(data) {
+  const panel = $("dead-letters");
+
+  if (data.count === 0) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+
+  panel.hidden = false;
+  panel.innerHTML = `
+    <div class="panel__head">
+      <div>
+        <p class="eyebrow">Dead-letter queue</p>
+        <h2 class="panel__title">
+          ${data.count} message${data.count === 1 ? "" : "s"} the pipeline could not process
+        </h2>
+      </div>
+      <p class="zone">${words(data.source)}</p>
+    </div>
+    <div class="dlq__body">
+      <p class="panel__lede">
+        Each of these failed every retry and was moved aside so it could not block the queue
+        behind it. The ledger never saw them and no money moved.
+      </p>
+      <ul class="held-list">
+        ${data.dead_letters
+          .map(
+            (row) => `<li>
+              ${escapeHtml(row.type ?? "unknown")} · ${escapeHtml(row.event_id)}
+              · ${escapeHtml(clockTime(row.dead_lettered_at))}
+              · ${escapeHtml(words(row.reason))}
+            </li>`,
+          )
+          .join("")}
+      </ul>
+    </div>`;
+}
+
 async function loadDashboard() {
-  const data = await api("/api/orders?limit=100");
+  // Two independent reads, issued together. The dead-letter table is almost
+  // always empty, so this costs a round trip and nothing else.
+  const [data, deadLetters] = await Promise.all([
+    api("/api/orders?limit=100"),
+    api("/api/dead-letters"),
+  ]);
+
   renderSummary(data.orders);
   renderOrders(data.orders);
+  renderDeadLetters(deadLetters);
   $("dashboard-zone").textContent = `${words(data.source)} · ${data.consistency}`;
 }
 
