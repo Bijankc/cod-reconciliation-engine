@@ -5,6 +5,13 @@
   "compatibility_date": "2026-08-01",
   "observability": { "enabled": true },
 
+  // Origins allowed to call this API from a browser. The frontend is served by
+  // Pages on a different origin, so this is what makes the dashboard work at
+  // all. Production adds the real *.pages.dev origin here.
+  "vars": {
+    "ALLOWED_ORIGINS": "http://localhost:8789,http://127.0.0.1:8789"
+  },
+
   // Ingestion (Zone 1) — at-least-once, out-of-order tolerant.
   "queues": {
     "producers": [{ "binding": "COURIER_QUEUE", "queue": "courier-events" }],

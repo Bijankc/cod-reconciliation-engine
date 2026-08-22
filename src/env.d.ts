@@ -14,4 +14,6 @@ export interface Env {
   AUDIT: R2Bucket;
   /** Shared secret the simulated courier presents on the webhook. */
   COURIER_SHARED_SECRET?: string;
+  /** Comma-separated origins allowed to call this API from a browser. */
+  ALLOWED_ORIGINS?: string;
 }
