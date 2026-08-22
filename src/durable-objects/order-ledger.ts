@@ -13,7 +13,9 @@
  *               ORIGINAL verdict and the CURRENT version, and moves no money —
  *               it only increments that event's delivery count.
  *   BUFFER      an event that is illegal now but plausibly early is held, and
- *               retried every time the state advances, until it fits.
+ *               retried every time the state advances, until it fits — or is
+ *               evicted as an anomaly once it can never fit. The buffer only
+ *               ever holds events with a future.
  *   LADDER      reconciliation is recomputed from scratch after every applied
  *               event, so the verdict is a function of state, never of history.
  *
@@ -80,6 +82,12 @@ export interface LedgerResult {
    * `applied`, so the consumer must revise their D1 rows to match.
    */
   drained: string[];
+  /**
+   * event_ids evicted from the pending buffer because they can never become
+   * legal — the order reached a terminal state while they waited. Verdict
+   * revised from `buffered` to `anomaly`; the consumer revises their rows too.
+   */
+  evicted: string[];
 }
 
 /** What a single event can do to the ledger. */
@@ -94,7 +102,11 @@ export class OrderLedger extends DurableObject<Env> {
    * The spec section 6 transition table, plus the two rules that make
    * out-of-order arrival survivable.
    */
-  private classify(event: CourierEvent, core: LedgerCore): Verdict {
+  private classify(
+    event: CourierEvent,
+    core: LedgerCore,
+    options: { fromBuffer?: boolean } = {},
+  ): Verdict {
     // Terminal states absorb nothing. A DELIVERED or RETURNED order receiving a
     // further event is a real anomaly, not a late arrival: there is no future
     // state in which it becomes legal, so buffering it would leak an event that
@@ -116,7 +128,36 @@ export class OrderLedger extends DurableObject<Env> {
     // in the current state must accrue even if its occurred_at predates an
     // earlier payment. Dropping cash on timestamp order alone loses real money.
     //
+    // Events arriving OUT OF THE BUFFER are exempt, and the reason is DOUBLE
+    // JEOPARDY, not convenience.
+    //
+    // The staleness rule and the buffer are two answers to ONE question: what
+    // does this event's position in the arrival stream tell us about it? The
+    // buffer already answered, at admission time. Admitting an event to the
+    // buffer IS the ruling that its arrival order is not evidence against it —
+    // that it is plausibly early rather than wrong. Re-running the arrival-order
+    // test on drain puts the event on trial a second time for the same charge,
+    // and lets the second trial reach the opposite verdict.
+    //
+    // It is also circular in the specific case: the prerequisite the event was
+    // waiting on is the very thing that just advanced the watermark, so the test
+    // asks the event to postdate the event it was queued behind. Fire `returned`
+    // before `delivery_attempted` — the headline out-of-order case — and the
+    // simulator stamps them in send order, so the watermark test fails the
+    // buffered event EVERY time.
+    //
+    // What the exemption does NOT do is excuse a buffered event from the state
+    // machine. The charge that is spent is arrival order alone; the rules below,
+    // and the terminal-state check above, still apply in full on every drain
+    // pass — which is how a buffered event that has become impossible is caught
+    // and evicted rather than silently applied. The only genuinely NEW evidence
+    // at drain time is the ledger's state, and state is what still gets tested.
+    //
+    // The staleness rule exists to reject a transition describing a world the
+    // ledger has moved PAST. It has no business judging one the ledger has been
+    // holding all along.
     if (
+      options.fromBuffer !== true &&
       core.last_occurred_at !== null &&
       Date.parse(event.occurred_at) < Date.parse(core.last_occurred_at)
     ) {
@@ -156,6 +197,12 @@ export class OrderLedger extends DurableObject<Env> {
 
     // last_occurred_at tracks STATE TRANSITIONS only. Letting a payment advance
     // the staleness watermark would start dropping legitimate transitions.
+    //
+    // A transition draining out of the buffer can move this BACKWARDS, which is
+    // inert only because every bufferable transition (delivery_confirmed,
+    // returned) lands the order in a terminal state where the watermark gates
+    // nothing, and delivery_attempted is never buffered. Add a non-terminal
+    // bufferable transition and that reasoning stops holding.
     return { ...core, status, last_occurred_at: event.occurred_at };
   }
 
@@ -230,6 +277,7 @@ export class OrderLedger extends DurableObject<Env> {
         state: this.project(core, version),
         deliveries,
         drained: [],
+        evicted: [],
       };
     }
 
@@ -246,6 +294,7 @@ export class OrderLedger extends DurableObject<Env> {
         state: this.project(core, version),
         deliveries: 1,
         drained: [],
+        evicted: [],
       };
     }
 
@@ -258,6 +307,7 @@ export class OrderLedger extends DurableObject<Env> {
         state: this.project(core, version),
         deliveries: 1,
         drained: [],
+        evicted: [],
       };
     }
 
@@ -281,13 +331,16 @@ export class OrderLedger extends DurableObject<Env> {
     // legal only on the next pass. Looping until no progress is the only
     // version that converges regardless of how deep the pile-up got.
     const drained: string[] = [];
+    const evicted: string[] = [];
     let progress = true;
     while (progress) {
       progress = false;
       const stillPending: CourierEvent[] = [];
 
       for (const buffered of pending) {
-        if (this.classify(buffered, core) === "apply") {
+        const verdict = this.classify(buffered, core, { fromBuffer: true });
+
+        if (verdict === "apply") {
           core = this.mutate(buffered, core);
           version += 1;
           drained.push(buffered.event_id);
@@ -306,9 +359,25 @@ export class OrderLedger extends DurableObject<Env> {
             version,
           });
           progress = true;
-        } else {
-          stillPending.push(buffered);
+          continue;
         }
+
+        if (verdict === "anomaly") {
+          // The buffer is a waiting room, not a graveyard. An event that has
+          // become impossible — the order went terminal while it waited — must
+          // LEAVE, or it is re-examined on every future event forever and the
+          // pending list only ever grows. It is recorded as the anomaly it
+          // turned out to be, and the money-truth is untouched.
+          evicted.push(buffered.event_id);
+          processed[buffered.event_id] = {
+            ...processed[buffered.event_id]!,
+            outcome: "anomaly",
+          };
+          progress = true;
+          continue;
+        }
+
+        stillPending.push(buffered);
       }
 
       pending = stillPending;
@@ -319,7 +388,13 @@ export class OrderLedger extends DurableObject<Env> {
     // set not.
     await this.ctx.storage.put({ state: core, processed, history, pending, version });
 
-    return { outcome: "applied", state: this.project(core, version), deliveries: 1, drained };
+    return {
+      outcome: "applied",
+      state: this.project(core, version),
+      deliveries: 1,
+      drained,
+      evicted,
+    };
   }
 
   /** The authoritative (CP) read, for the dashboard's projected-vs-truth toggle. */

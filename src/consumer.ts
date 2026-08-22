@@ -134,14 +134,23 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       key,
     ),
 
-    // Events that drained out of the pending buffer because of this one. Their
-    // rows still say `buffered` from when they arrived early; the ledger has
-    // since applied them, so the timeline has to catch up or it will keep
-    // showing a held event that is actually settled. Guarded on the old value
-    // so this can never walk an `anomaly` backwards.
+    // Events whose verdict the ledger just REVISED. Their rows still say
+    // `buffered` from when they arrived early; the ledger has since ruled on
+    // them, so the timeline has to catch up or it will keep showing a held event
+    // that has actually been settled one way or the other. Both updates are
+    // guarded on the old value, so a replay can never walk a verdict backwards.
+    //
+    //   drained — waited for its prerequisite, got it, and applied.
+    //   evicted — waited, and the order went terminal underneath it.
     ...result.drained.map((eventId) =>
       env.DB.prepare(
         `UPDATE order_events SET outcome = 'applied'
+          WHERE event_id = ? AND outcome = 'buffered'`,
+      ).bind(eventId),
+    ),
+    ...result.evicted.map((eventId) =>
+      env.DB.prepare(
+        `UPDATE order_events SET outcome = 'anomaly'
           WHERE event_id = ? AND outcome = 'buffered'`,
       ).bind(eventId),
     ),
@@ -155,7 +164,8 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       `recon=${result.state.reconciliation_status} v=${result.state.version} ` +
       `projection=${projection}` +
       (result.deliveries > 1 ? ` delivery#${result.deliveries}` : "") +
-      (result.drained.length > 0 ? ` drained=${result.drained.join(",")}` : ""),
+      (result.drained.length > 0 ? ` drained=${result.drained.join(",")}` : "") +
+      (result.evicted.length > 0 ? ` evicted=${result.evicted.join(",")}` : ""),
   );
   return result.outcome;
 }

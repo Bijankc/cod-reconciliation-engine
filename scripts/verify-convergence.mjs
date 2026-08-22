@@ -1,7 +1,7 @@
 /**
  * The convergence proof — the test the spec asks for before any frontend exists.
  *
- * Four scenarios, driven entirely through the PUBLIC surface: orders are created
+ * Five scenarios, driven entirely through the PUBLIC surface: orders are created
  * over the merchant API and events are delivered over `POST /webhook/courier`
  * with a real bearer token, exactly as a courier would. Nothing reaches into the
  * queue, the Durable Object or D1 directly, because a test that skips the
@@ -15,6 +15,9 @@
  *                        timestamps in the awkward order the simulator actually
  *                        produces. Buffered, then drained, then converged.
  *   4. DISCREPANCY       returned holding cash — the flag a merchant acts on.
+ *   5. BUFFER EVICTION   a held event that becomes impossible must LEAVE the
+ *                        buffer, and must stay gone. Guards against a leak
+ *                        that no money or status assertion can see.
  *
  * Every scenario ends by asserting the SAME structural property, which is what
  * Phase 4 added and what makes the dashboard trustworthy:
@@ -340,6 +343,113 @@ console.log("\n4. Discrepancy — returned, but the courier is holding cash");
     "RETURNED_WITH_PAYMENT",
   );
   assertProjectionMatchesLedger(body, "discrepancy");
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n5. Buffer eviction — a held event that can never become legal must LEAVE");
+// ---------------------------------------------------------------------------
+//
+// The buffer-leak trap this covers is INVISIBLE to an ordinary functional test.
+// A leaked event does not corrupt money, does not fail a status assertion and
+// does not throw. It just never leaves `pending`, so every future event for that
+// order re-examines it: work per event stops being constant and starts growing
+// with the number of dead events the order has accumulated. The only way to see
+// it is to assert on the buffer itself, and to keep asserting AFTER the event
+// that should have removed it.
+//
+// The sequence builds a buffered event that becomes impossible while it waits:
+//
+//   returned            arrives first  -> buffered (order is still PENDING)
+//   delivery_confirmed  arrives second -> buffered (order is still PENDING)
+//   delivery_attempted  arrives third  -> applies, DISPATCHED, drains the buffer
+//                                          `returned` applies -> RETURNED (terminal)
+//                                          `delivery_confirmed` is now impossible
+//
+// A ledger that only removes events it APPLIES leaves `delivery_confirmed` in
+// `pending` forever. The assertions below fail loudly if it does.
+{
+  const order = await createOrder("Eliza Rai", 700);
+  const returned = eventId("evict_returned");
+  const confirmed = eventId("evict_confirmed");
+  const dispatch = eventId("evict_dispatch");
+
+  await send({ event_id: returned, order_id: order, type: "returned", occurred_at: at(10) });
+  await send({
+    event_id: confirmed,
+    order_id: order,
+    type: "delivery_confirmed",
+    occurred_at: at(11),
+  });
+
+  const held = await waitUntil(
+    order,
+    (b) => processed(returned)(b) && processed(confirmed)(b),
+    "both early events to be buffered",
+  );
+  check("eviction: two events held", held.authoritative.pending.length, 2);
+  check("eviction: nothing applied yet", held.authoritative.history.length, 0);
+
+  // The prerequisite lands. `returned` drains and takes the order terminal,
+  // which is what makes `delivery_confirmed` impossible.
+  await send({
+    event_id: dispatch,
+    order_id: order,
+    type: "delivery_attempted",
+    occurred_at: at(12),
+  });
+
+  const body = await waitUntil(
+    order,
+    (b) => b.order.current_status === "RETURNED" && converged(b),
+    "the buffer to drain and evict",
+  );
+
+  check("eviction: order settled", body.order.current_status, "RETURNED");
+  check("eviction: no money moved", body.order.amount_collected, 0);
+  check("eviction: buffer is empty", body.authoritative.pending.length, 0);
+  check("eviction: only the two legal events applied", body.authoritative.history.length, 2);
+  check(
+    "eviction: the impossible event was never applied",
+    body.authoritative.history.some((h) => h.event_id === confirmed),
+    false,
+  );
+  check("eviction: its row was revised to anomaly", row(body, confirmed).outcome, "anomaly");
+  check("eviction: the drained event became applied", row(body, returned).outcome, "applied");
+
+  // THE ASSERTION THAT CATCHES THE LEAK. An evicted event must not reappear in
+  // the buffer, and must not be re-examined, on any subsequent event. Fire two
+  // more events and confirm the buffer stays empty and the history stays put —
+  // a leaked event would still be sitting in `pending` here, quietly making
+  // every future event more expensive than the last.
+  await send({
+    event_id: eventId("evict_after_a"),
+    order_id: order,
+    type: "payment_collected",
+    amount: 700,
+    occurred_at: at(20),
+  });
+  await send({
+    event_id: eventId("evict_after_b"),
+    order_id: order,
+    type: "delivery_confirmed",
+    occurred_at: at(21),
+  });
+
+  const after = await waitUntil(
+    order,
+    (b) => b.timeline.length === 5,
+    "two more events to be processed against the settled order",
+  );
+
+  check("eviction: buffer still empty two events later", after.authoritative.pending.length, 0);
+  check("eviction: nothing new was applied", after.authoritative.history.length, 2);
+  check("eviction: money still untouched", after.order.amount_collected, 0);
+  check(
+    "eviction: post-terminal events recorded as anomalies",
+    after.timeline.filter((r) => r.outcome === "anomaly").length,
+    3,
+  );
+  assertProjectionMatchesLedger(after, "eviction");
 }
 
 // ---------------------------------------------------------------------------
