@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+
+  // The console is its own Cloudflare Pages project, deliberately separate from
+  // the Worker next door. Pages requires a wrangler config at ITS project root
+  // and cannot share the Worker's — which is the tool being blunt about
+  // something true: these are two deployables on two origins, and the browser
+  // hop between them is a real network boundary that CORS has to authorise.
+  "name": "cod-reconciliation-console",
+  "compatibility_date": "2026-08-01",
+  "pages_build_output_dir": "public"
+}

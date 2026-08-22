@@ -1,0 +1,818 @@
+/* ===========================================================================
+   COD Reconciliation — console styles.
+
+   The subject is a cash book: two columns that are supposed to agree, and the
+   work is finding the rows where they do not. Everything here serves that.
+
+   Ground is cool bond paper rather than warm cream, ink is navy-black, and rules
+   are the pale blue-grey of accounting paper. Colour is never the only carrier
+   of meaning — every state also has a word, and a discrepancy also has a flag.
+   =========================================================================== */
+
+:root {
+  --paper: #e7ebf0;
+  --card: #fbfcfd;
+  --card-sunk: #f1f4f8;
+  --ink: #131922;
+  --ink-soft: #5a6675;
+  --ink-faint: #8b96a4;
+  --rule: #cbd4de;
+  --rule-strong: #a8b4c2;
+
+  /* State. Green settled, amber in flight, vermillion flagged, indigo for the
+     authoritative ledger — the CP side of every projected/authoritative pair. */
+  --settled: #10614a;
+  --settled-wash: #dceee6;
+  --held: #8a5a05;
+  --held-wash: #f8ebd2;
+  --flag: #b92c22;
+  --flag-wash: #fadedb;
+  --cp: #2b3d9c;
+  --cp-wash: #dfe3f7;
+
+  --shadow: 0 1px 2px rgb(19 25 34 / 6%), 0 8px 24px -16px rgb(19 25 34 / 28%);
+  --radius: 3px;
+
+  --sans: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+figure {
+  margin: 0;
+}
+
+a {
+  color: var(--cp);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cp);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+/* --- The mono utility voice: eyebrows, zone labels, every figure. ---------- */
+.eyebrow,
+.zone,
+.badge,
+.mono,
+th,
+.freshness {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: var(--ink-faint);
+  margin-bottom: 0.35rem;
+}
+
+/* --- Masthead ------------------------------------------------------------- */
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.15rem clamp(1rem, 4vw, 2.5rem);
+  border-bottom: 1px solid var(--rule);
+  background: var(--card);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* A double rule — the cash book's own device for "totals below this line". */
+.wordmark__rule {
+  width: 26px;
+  height: 9px;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+
+.wordmark__text {
+  font-weight: 800;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+.freshness {
+  color: var(--ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.freshness::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--settled);
+}
+
+.freshness[data-state="stale"]::before {
+  background: var(--held);
+}
+.freshness[data-state="down"]::before {
+  background: var(--flag);
+}
+
+/* A single tick per poll, so eventual consistency has a heartbeat you can see. */
+.freshness[data-pulse="on"]::before {
+  animation: tick 600ms ease-out;
+}
+
+@keyframes tick {
+  from {
+    transform: scale(2.1);
+    opacity: 0.35;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- Alert ---------------------------------------------------------------- */
+.alert {
+  margin: 1rem clamp(1rem, 4vw, 2.5rem) 0;
+  padding: 0.85rem 1rem;
+  background: var(--flag-wash);
+  border-left: 3px solid var(--flag);
+  color: #7c1c16;
+  font-size: 0.875rem;
+}
+
+.alert code {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+/* --- Layout --------------------------------------------------------------- */
+main {
+  padding: clamp(1rem, 3vw, 1.75rem) clamp(1rem, 4vw, 2.5rem) 3rem;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.panel--form {
+  padding: 1.25rem;
+}
+
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.panel__title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.panel__lede {
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  margin-top: 0.4rem;
+}
+
+/* The zone label is not decoration: it is the API's own `source` and
+   `consistency` fields, printed where the data lands. */
+.zone {
+  color: var(--ink-faint);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+/* --- Summary strip -------------------------------------------------------- */
+.ledger-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.tally {
+  background: var(--card);
+  padding: 0.95rem 1.15rem;
+}
+
+.tally--flagged {
+  background: var(--flag-wash);
+}
+
+.tally__label {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.tally--flagged .tally__label {
+  color: #8f231b;
+}
+
+.tally__value {
+  font-family: var(--mono);
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 0.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tally--flagged .tally__value {
+  color: var(--flag);
+}
+
+.tally__note {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-top: 0.1rem;
+}
+
+/* --- Form ----------------------------------------------------------------- */
+.field {
+  margin-bottom: 0.9rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+}
+
+.field__unit {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+}
+
+.field input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--card-sunk);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+.field input::placeholder {
+  color: var(--ink-faint);
+}
+
+.field__error {
+  color: var(--flag);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  min-height: 0;
+}
+
+.button {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--card);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #000;
+}
+
+.button[disabled] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.form-receipt {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--settled-wash);
+  border-left: 3px solid var(--settled);
+  font-size: 0.8125rem;
+}
+
+.form-receipt code {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+/* --- Orders table --------------------------------------------------------- */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.orders {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.orders th {
+  text-align: left;
+  color: var(--ink-faint);
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.orders td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.orders tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.orders tbody tr:hover {
+  background: var(--card-sunk);
+}
+
+.orders tr[data-flagged="true"] {
+  background: var(--flag-wash);
+}
+
+.orders tr[data-flagged="true"]:hover {
+  background: #f6d3cf;
+}
+
+.col-bar {
+  width: 34%;
+  min-width: 230px;
+}
+
+.order-link {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  color: var(--cp);
+}
+
+.order-link:hover {
+  text-decoration: underline;
+}
+
+.customer {
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.empty strong {
+  display: block;
+  color: var(--ink);
+  margin-bottom: 0.3rem;
+}
+
+/* --- THE SIGNATURE: the reconciliation bar -------------------------------- */
+/*
+   Collected and expected share one scale, so the bar is a true comparison
+   rather than a percentage. The expected line sits wherever expected falls on
+   that scale — which means an overpayment physically OVERSHOOTS it, because
+   the ledger never clamps and neither does its picture.
+*/
+.recbar {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.recbar__track {
+  position: relative;
+  height: 10px;
+  background: var(--card-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.recbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--collected-pct) * 1%);
+  background: var(--bar-color, var(--ink-faint));
+}
+
+/* The expected line: where the courier's obligation ends. */
+.recbar__expected {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: calc(var(--expected-pct) * 1%);
+  width: 2px;
+  background: var(--ink);
+  transform: translateX(-1px);
+}
+
+.recbar__figures {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.recbar__figures b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.recbar__gap {
+  color: var(--flag);
+  font-weight: 600;
+}
+
+/* --- Badges --------------------------------------------------------------- */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  background: var(--card-sunk);
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+}
+
+.badge[data-tone="settled"] {
+  background: var(--settled-wash);
+  color: var(--settled);
+  border-color: #b6dccc;
+}
+
+.badge[data-tone="held"] {
+  background: var(--held-wash);
+  color: var(--held);
+  border-color: #e6cf9d;
+}
+
+.badge[data-tone="flag"] {
+  background: var(--flag-wash);
+  color: var(--flag);
+  border-color: #edbcb7;
+}
+
+.badge[data-tone="cp"] {
+  background: var(--cp-wash);
+  color: var(--cp);
+  border-color: #bdc5ee;
+}
+
+.reason {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #8f231b;
+  margin-top: 0.3rem;
+  max-width: 30ch;
+  white-space: normal;
+}
+
+/* --- Detail view ---------------------------------------------------------- */
+.back {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  text-decoration: none;
+  margin-bottom: 1rem;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.detail-head {
+  margin-bottom: 1.25rem;
+}
+
+.detail-head h1 {
+  font-family: var(--mono);
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.detail-head p {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  align-items: start;
+}
+
+.book {
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+/* Ruled paper, and ONLY here: this panel is the book of record. */
+.book--authoritative {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 27px,
+    var(--cp-wash) 27px,
+    var(--cp-wash) 28px
+  );
+  border-color: #bdc5ee;
+}
+
+.book__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.75rem 1rem;
+  margin-top: 0.9rem;
+}
+
+.figure__label {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.figure__value {
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* --- The projected / authoritative switch --------------------------------- */
+.switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  cursor: pointer;
+}
+
+.switch input {
+  margin: 0.2rem 0 0;
+  accent-color: var(--cp);
+  width: 1rem;
+  height: 1rem;
+}
+
+.switch__text strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.switch__text span {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.divergence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+  border: 1px solid;
+}
+
+.divergence[data-converged="true"] {
+  background: var(--settled-wash);
+  border-color: #b6dccc;
+  color: var(--settled);
+}
+
+.divergence[data-converged="false"] {
+  background: var(--held-wash);
+  border-color: #e6cf9d;
+  color: var(--held);
+}
+
+.divergence b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Timeline ------------------------------------------------------------- */
+.timeline {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.timeline th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.timeline td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.timeline tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.stamp {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.event-type {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.repeat {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--held);
+  background: var(--held-wash);
+  border: 1px solid #e6cf9d;
+  border-radius: 2px;
+  padding: 0.05rem 0.3rem;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.money-cell {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.raw-link {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.raw-link:hover {
+  text-decoration: underline;
+}
+
+.held-list {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.held-list li {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--held-wash);
+  border-left: 2px solid var(--held);
+}
+
+/* --- Footer --------------------------------------------------------------- */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+  padding: 1rem clamp(1rem, 4vw, 2.5rem);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.footer__api {
+  font-family: var(--mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

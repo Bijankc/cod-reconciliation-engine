@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>COD Reconciliation</title>
+    <meta
+      name="description"
+      content="Cash-on-delivery reconciliation: what a courier owes you, against what they have actually handed over."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="masthead">
+      <div class="wordmark">
+        <span class="wordmark__rule" aria-hidden="true"></span>
+        <span class="wordmark__text">COD Reconciliation</span>
+      </div>
+      <div class="masthead__status">
+        <span class="freshness" id="freshness" aria-live="polite">connecting</span>
+      </div>
+    </header>
+
+    <!-- The failure this banner exists for is the one that looks like nothing at
+         all: a cross-origin call the browser discards before the page sees it. -->
+    <div class="alert" id="alert" role="alert" hidden></div>
+
+    <main id="main">
+      <!-- ================= DASHBOARD ================= -->
+      <section id="view-dashboard">
+        <div class="ledger-strip" id="summary"></div>
+
+        <div class="columns">
+          <aside class="panel panel--form">
+            <p class="eyebrow">New order</p>
+            <h2 class="panel__title">Book a delivery</h2>
+            <p class="panel__lede">
+              The amount you expect the courier to collect in cash. Events arrive later.
+            </p>
+
+            <form id="order-form" novalidate>
+              <div class="field">
+                <label for="customer_name">Customer</label>
+                <input
+                  id="customer_name"
+                  name="customer_name"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Aakancha Thapa"
+                  required
+                />
+                <p class="field__error" data-error-for="customer_name"></p>
+              </div>
+
+              <div class="field">
+                <label for="cod_amount">
+                  Expected on delivery <span class="field__unit" id="unit-hint"></span>
+                </label>
+                <input
+                  id="cod_amount"
+                  name="cod_amount"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="1500"
+                  required
+                />
+                <p class="field__error" data-error-for="cod_amount"></p>
+              </div>
+
+              <div class="field">
+                <label for="merchant_id">Merchant</label>
+                <input id="merchant_id" name="merchant_id" type="text" value="m1" required />
+                <p class="field__error" data-error-for="merchant_id"></p>
+              </div>
+
+              <button class="button" type="submit" id="create-button">Create order</button>
+              <p class="form-receipt" id="form-receipt" aria-live="polite" hidden></p>
+            </form>
+          </aside>
+
+          <section class="panel panel--table">
+            <div class="panel__head">
+              <div>
+                <p class="eyebrow">Orders</p>
+                <h2 class="panel__title">Expected against collected</h2>
+              </div>
+              <p class="zone" id="dashboard-zone"></p>
+            </div>
+            <div class="table-scroll">
+              <table class="orders">
+                <thead>
+                  <tr>
+                    <th scope="col">Order</th>
+                    <th scope="col">Customer</th>
+                    <th scope="col" class="col-bar">Collected against expected</th>
+                    <th scope="col">Delivery</th>
+                    <th scope="col">Reconciliation</th>
+                  </tr>
+                </thead>
+                <tbody id="orders-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ================= ORDER DETAIL ================= -->
+      <section id="view-detail" hidden>
+        <a class="back" href="#/">Back to all orders</a>
+        <div id="detail-body"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span
+        >Async ingestion &rarr; CP ledger &rarr; eventually-consistent reads. Polling every
+        2&nbsp;seconds, so the lag is visible rather than hidden.</span
+      >
+      <span class="footer__api" id="api-base"></span>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

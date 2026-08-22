@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8788",
+    "frontend": "node scripts/serve-frontend.mjs",
     "deploy": "wrangler deploy",
+    "deploy:frontend": "cd frontend && wrangler pages deploy",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types",
     "verify:ladder": "node scripts/verify-ladder.ts",
