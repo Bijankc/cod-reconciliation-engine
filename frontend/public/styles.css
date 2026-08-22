@@ -816,3 +816,195 @@ main {
     transition: none !important;
   }
 }
+
+/* --- Simulator ------------------------------------------------------------ */
+/*
+   The simulator is a control surface sitting inside a reading surface, so it is
+   given the one visual device nothing else on the page uses: a heavier top rule
+   in the CP indigo. It reads as an instrument panel rather than another card.
+*/
+.sim {
+  border-top: 3px solid var(--cp);
+  margin-bottom: 1.25rem;
+}
+
+.sim__body {
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.sim[data-busy="true"] {
+  /* A running scenario has deliberate pauses in it; say so rather than looking
+     frozen. */
+  cursor: progress;
+}
+
+.sim__buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+.button--scenario {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: var(--card-sunk);
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.button--scenario:hover {
+  background: var(--cp-wash);
+  border-color: var(--cp);
+}
+
+.button--scenario span {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.button--danger {
+  width: auto;
+  background: var(--flag);
+  border-color: var(--flag);
+}
+
+.button--danger:hover {
+  background: #9d251c;
+}
+
+.sim__custom,
+.sim__secret {
+  border-top: 1px solid var(--rule);
+  padding-top: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.sim__custom summary,
+.sim__secret summary {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.sim__custom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 0.85rem;
+}
+
+.sim__custom label,
+.sim__secret label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.sim__custom span,
+.sim__secret span {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sim__custom select,
+.sim__custom input,
+.sim__secret input {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--card-sunk);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+.sim__secret {
+  margin-bottom: 0.85rem;
+}
+
+.sim__secret p {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-top: 0.5rem;
+  max-width: 62ch;
+}
+
+.sim__dlq {
+  border-top: 1px solid var(--rule);
+  padding-top: 0.95rem;
+  margin-top: 0.25rem;
+}
+
+.sim__dlq p {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-top: 0.55rem;
+  max-width: 68ch;
+}
+
+.sim__dlq code {
+  font-family: var(--mono);
+}
+
+/* --- Simulator log -------------------------------------------------------- */
+.sim-log {
+  list-style: none;
+  margin: 1.1rem 0 0;
+  padding: 0.7rem 0 0;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  gap: 0.3rem;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.sim-log li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.4rem;
+  border-left: 2px solid var(--rule);
+}
+
+.sim-log li[data-tone="good"] {
+  border-left-color: var(--settled);
+  background: var(--settled-wash);
+}
+
+.sim-log li[data-tone="bad"] {
+  border-left-color: var(--flag);
+  background: var(--flag-wash);
+}
+
+.sim-log li[data-tone="wait"] {
+  border-left-color: var(--held);
+  background: var(--held-wash);
+}
+
+.sim-log__time {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-log__empty {
+  color: var(--ink-faint);
+  border-left-color: transparent;
+}
