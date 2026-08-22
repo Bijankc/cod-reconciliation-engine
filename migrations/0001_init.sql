@@ -5,12 +5,12 @@
 -- authoritative write model (CP); everything in `orders` below the registry
 -- columns is a projection of DO state and may lag.
 --
--- All schema decisions from the locked decision log are folded in HERE, not
--- retrofitted in Phase 4:
+-- Schema decisions from the decision log, folded in while that was still legal:
 --   * orders.discrepancy_reason          (Decision 3)
 --   * six-value reconciliation_status    (Decision 3, incl. AWAITING_CONFIRMATION)
 --   * orphan_events table                (Decision 5)
 --   * CHECK constraints mirroring the TS const arrays in src/shared/constants.ts
+--   * order_events.outcome = the ledger's three verdicts + delivery_count (Decision 9)
 --
 -- The CHECK constraints are deliberate redundancy: the enums live in TypeScript
 -- as the single source of truth, and the database refuses to store anything
@@ -84,8 +84,19 @@ CREATE TABLE IF NOT EXISTS order_events (
   amount       INTEGER CHECK (amount IS NULL OR amount > 0),
   occurred_at  TEXT,                        -- courier's clock
   received_at  TEXT NOT NULL,               -- our clock
+  -- The ledger's verdict, and only ever one of its three verdicts (Decision 9).
+  -- A verdict can be revised exactly once, buffered -> applied, when the event
+  -- drains out of the pending buffer.
   outcome      TEXT NOT NULL
-                 CHECK (outcome IN ('received','applied','duplicate','buffered','anomaly')),
+                 CHECK (outcome IN ('applied','buffered','anomaly')),
+
+  -- How many times the pipeline was handed this event_id. 1 is the normal case;
+  -- 2+ means a genuine courier duplicate or a queue redelivery, which at this
+  -- layer are indistinguishable and both mean the same thing: the ledger was
+  -- asked twice and moved money once. Projected from the DO's count, never
+  -- incremented locally, so re-running the write is idempotent.
+  delivery_count INTEGER NOT NULL DEFAULT 1 CHECK (delivery_count >= 1),
+
   courier_id   TEXT,
   raw_r2_key   TEXT,                        -- pointer into the R2 audit log
   FOREIGN KEY (order_id) REFERENCES orders(order_id)

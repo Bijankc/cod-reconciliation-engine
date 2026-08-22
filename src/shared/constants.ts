@@ -118,16 +118,19 @@ export const DISCREPANCY_REASON_TEXT: Record<DiscrepancyReason, string> = {
 
 // ---------------------------------------------------------------------------
 // Per-event processing outcome (recorded in D1 order_events)
+//
+// Decision 9: these are EXACTLY the ledger's three verdicts, and nothing else.
+// An outcome answers one question — what did the ledger DO with this event —
+// so every value here must be something the Durable Object can return.
+//
+// Two values were removed in Phase 4 once the projection made them observable
+// as dead: 'received' (a Phase 2 placeholder, unreachable the moment the
+// consumer started recording real verdicts) and 'duplicate' (never a verdict at
+// all — a redelivered event keeps the verdict it earned the first time, and how
+// many times it arrived is counted separately in `delivery_count`).
 // ---------------------------------------------------------------------------
 
-export const EVENT_OUTCOMES = [
-  /** Audited to R2 and registered, ledger verdict not yet determined (Phase 2). */
-  "received",
-  "applied",
-  "duplicate",
-  "buffered",
-  "anomaly",
-] as const;
+export const EVENT_OUTCOMES = ["applied", "buffered", "anomaly"] as const;
 export type EventOutcome = (typeof EVENT_OUTCOMES)[number];
 
 /** Why an event was orphaned. Decision 5: today there is exactly one reason. */

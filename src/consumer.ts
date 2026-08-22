@@ -14,7 +14,16 @@
  *   4. Otherwise record the event against the order.
  *
  * PHASE 3: step 4 calls the OrderLedger Durable Object and records its verdict.
- * The 'received' placeholder Phase 2 wrote is no longer reachable on this path.
+ * PHASE 4: steps 5-6 carry that verdict into the read model — the version-guarded
+ * projection of the ledger state, then the timeline row for the event itself.
+ *
+ * Projection BEFORE timeline row, deliberately. Both writes are idempotent and
+ * either order converges under retry, so the tie is broken on what a crash in
+ * between looks like to a merchant. Projection first leaves a correct total with
+ * one event missing from the timeline. Timeline first leaves a visible
+ * "payment_collected — applied" sitting above a total that does not include it,
+ * which is a system contradicting itself about money. The recoverable state
+ * should be the one that does not look like a bug.
  *
  * Failure posture: transient failures (a D1 or R2 hiccup) throw, so the Queue
  * retries with backoff — at-least-once delivery is the whole point, and the DO's
@@ -25,6 +34,7 @@
 
 import type { Env } from "./env.d.ts";
 import type { QueuedCourierEvent } from "./shared/types.ts";
+import { projectToD1 } from "./projection.ts";
 
 /** R2 key layout, per spec 7.3. Immutable, write-once. */
 export function auditKey(orderId: string, eventId: string): string {
@@ -88,18 +98,30 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
   const ledger = env.ORDER_LEDGER.get(id);
   const result = await ledger.applyEvent(event, order.cod_amount);
 
-  // 5. Record the event with the ledger's REAL verdict — applied, duplicate,
-  //    buffered or anomaly. Written once, in a single insert; 'received' is
-  //    never written on this path, so a row can never be left holding a
-  //    verdict-pending placeholder after the ledger has ruled.
-  //    INSERT OR IGNORE because at-least-once means this may be a redelivery,
-  //    and event_id is the primary key.
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO order_events
-       (event_id, order_id, type, amount, occurred_at, received_at, outcome, courier_id, raw_r2_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(
+  // 5. Project the ledger state into the read model. The version guard makes
+  //    this safe to lose a race: a stale write matches no rows and disappears.
+  const projection = await projectToD1(result.state, env);
+
+  // 6. Record the event with the ledger's REAL verdict, plus everything the
+  //    ledger now knows about this event_id, in one batch.
+  //
+  //    ON CONFLICT rather than INSERT OR IGNORE: at-least-once means the row may
+  //    already exist, and when it does there are two things worth refreshing.
+  //    `delivery_count` comes from the DO's count rather than being incremented
+  //    here, so replaying this write can never inflate it. `outcome` is adopted
+  //    from the ledger's standing verdict, which makes the row self-healing —
+  //    if the buffered -> applied revision below was ever lost to a crash, the
+  //    next redelivery of that event silently repairs it.
+  const writes = [
+    env.DB.prepare(
+      `INSERT INTO order_events
+         (event_id, order_id, type, amount, occurred_at, received_at,
+          outcome, delivery_count, courier_id, raw_r2_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(event_id) DO UPDATE SET
+         delivery_count = excluded.delivery_count,
+         outcome        = excluded.outcome`,
+    ).bind(
       event.event_id,
       event.order_id,
       event.type,
@@ -107,16 +129,33 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       event.occurred_at,
       receivedAt,
       result.outcome,
+      result.deliveries,
       event.courier_id ?? null,
       key,
-    )
-    .run();
+    ),
+
+    // Events that drained out of the pending buffer because of this one. Their
+    // rows still say `buffered` from when they arrived early; the ledger has
+    // since applied them, so the timeline has to catch up or it will keep
+    // showing a held event that is actually settled. Guarded on the old value
+    // so this can never walk an `anomaly` backwards.
+    ...result.drained.map((eventId) =>
+      env.DB.prepare(
+        `UPDATE order_events SET outcome = 'applied'
+          WHERE event_id = ? AND outcome = 'buffered'`,
+      ).bind(eventId),
+    ),
+  ];
+
+  await env.DB.batch(writes);
 
   console.log(
     `[${result.outcome}] ${event.type} ${event.event_id} order=${event.order_id} ` +
       `status=${result.state.status} collected=${result.state.amount_collected}/${result.state.cod_amount} ` +
-      `recon=${result.state.reconciliation_status} v=${result.state.version}` +
-      (result.drained > 0 ? ` drained=${result.drained}` : ""),
+      `recon=${result.state.reconciliation_status} v=${result.state.version} ` +
+      `projection=${projection}` +
+      (result.deliveries > 1 ? ` delivery#${result.deliveries}` : "") +
+      (result.drained.length > 0 ? ` drained=${result.drained.join(",")}` : ""),
   );
   return result.outcome;
 }

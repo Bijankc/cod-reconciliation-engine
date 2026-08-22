@@ -3,9 +3,14 @@
  *
  * Async AP ingestion -> CP ledger -> eventually-consistent reads.
  *
- * PHASE 2: the merchant order API, the courier webhook, and the queue consumer
- * writing to the R2 audit log. The ledger arrives in Phase 3, the projection in
- * Phase 4.
+ * PHASE 4: all three zones are now wired end to end. The webhook validates and
+ * enqueues (AP ingestion), the consumer audits to R2 and drives the OrderLedger
+ * Durable Object (CP), and the ledger's state is projected into D1 behind a
+ * version guard for the dashboard to read (eventually consistent).
+ *
+ * Every read route names the zone that answered it. `?authoritative=true` on the
+ * order detail route is the exception that proves the split: it reads the ledger
+ * itself and reports how far the projection is trailing.
  */
 
 import type { Env } from "./env.d.ts";
@@ -18,6 +23,7 @@ import {
 } from "./shared/constants.ts";
 import { json, notFound, methodNotAllowed } from "./shared/http.ts";
 import { createOrder, listOrders, getOrder } from "./api/orders.ts";
+import { getOrderAudit } from "./api/audit.ts";
 import { courierWebhook } from "./api/webhook.ts";
 import { consumeBatch } from "./consumer.ts";
 
@@ -26,7 +32,7 @@ export { OrderLedger } from "./durable-objects/order-ledger.ts";
 function health(env: Env): Response {
   return json({
     service: "cod-reconciliation-engine",
-    phase: 3,
+    phase: 4,
     status: "ok",
     currency: CURRENCY.code,
     amount_unit: CURRENCY.label,
@@ -66,7 +72,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   const orderDetail = /^\/api\/orders\/([^/]+)$/.exec(path);
   if (orderDetail) {
     if (method !== "GET") return methodNotAllowed(["GET"]);
-    return getOrder(decodeURIComponent(orderDetail[1]!), env);
+    // Opt-in, because it costs a Durable Object round trip. The dashboard list
+    // never pays it; a single order being inspected side by side does.
+    const authoritative = url.searchParams.get("authoritative") === "true";
+    return getOrder(decodeURIComponent(orderDetail[1]!), env, { authoritative });
+  }
+
+  const orderAudit = /^\/api\/orders\/([^/]+)\/audit$/.exec(path);
+  if (orderAudit) {
+    if (method !== "GET") return methodNotAllowed(["GET"]);
+    return getOrderAudit(decodeURIComponent(orderAudit[1]!), request, env);
   }
 
   return notFound("route", url.pathname);

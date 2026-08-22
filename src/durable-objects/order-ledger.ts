@@ -10,7 +10,8 @@
  * because they do. Three mechanisms make that survivable:
  *
  *   DEDUP       event_id is the idempotency key. A repeat is answered with the
- *               ORIGINAL verdict and the CURRENT version, and mutates nothing.
+ *               ORIGINAL verdict and the CURRENT version, and moves no money —
+ *               it only increments that event's delivery count.
  *   BUFFER      an event that is illegal now but plausibly early is held, and
  *               retried every time the state advances, until it fits.
  *   LADDER      reconciliation is recomputed from scratch after every applied
@@ -18,7 +19,8 @@
  *
  * Storage layout (spec 7.1), on the SQLite-backed KV API:
  *   "state"     LedgerCore — the money-truth
- *   "processed" event_id -> { outcome, version } — dedup + original verdict
+ *   "processed" event_id -> { outcome, version, deliveries } — dedup, original
+ *               verdict, and how many times the event has been handed to us
  *   "history"   applied events, in the order they were applied
  *   "pending"   the out-of-order holding pen
  *   "version"   monotonic projection version
@@ -46,8 +48,12 @@ interface LedgerCore {
 }
 
 interface ProcessedRecord {
+  /** The verdict this event earned the first time it was seen. Never revised
+   *  except buffered -> applied, when the event drains. */
   outcome: EventOutcome;
   version: number;
+  /** How many times this event_id has been handed to the ledger. Starts at 1. */
+  deliveries: number;
 }
 
 interface HistoryEntry {
@@ -62,8 +68,18 @@ interface HistoryEntry {
 export interface LedgerResult {
   outcome: EventOutcome;
   state: LedgerState;
-  /** How many buffered events became legal as a result of this one. */
-  drained: number;
+  /**
+   * Times this event_id has now been delivered. > 1 means the ledger just
+   * absorbed a duplicate: the consumer projects this count, and the money-truth
+   * in `state` is the proof it changed nothing.
+   */
+  deliveries: number;
+  /**
+   * event_ids that were sitting in the pending buffer and became legal as a
+   * result of this event. Their verdict has just changed from `buffered` to
+   * `applied`, so the consumer must revise their D1 rows to match.
+   */
+  drained: string[];
 }
 
 /** What a single event can do to the ledger. */
@@ -99,6 +115,7 @@ export class OrderLedger extends DurableObject<Env> {
     // Payments are deliberately exempt: they are ADDITIVE, and a valid payment
     // in the current state must accrue even if its occurred_at predates an
     // earlier payment. Dropping cash on timestamp order alone loses real money.
+    //
     if (
       core.last_occurred_at !== null &&
       Date.parse(event.occurred_at) < Date.parse(core.last_occurred_at)
@@ -202,32 +219,52 @@ export class OrderLedger extends DurableObject<Env> {
     // wrong thing to record in that row.
     const seen = processed[event.event_id];
     if (seen !== undefined) {
-      return { outcome: seen.outcome, state: this.project(core, version), drained: 0 };
+      // Count the redelivery. This is the ONLY mutation a duplicate is allowed
+      // to make, and it touches no money — which is exactly the property the
+      // "send payment_collected twice" demo needs to be able to show.
+      const deliveries = seen.deliveries + 1;
+      processed[event.event_id] = { ...seen, deliveries };
+      await this.ctx.storage.put({ processed });
+      return {
+        outcome: seen.outcome,
+        state: this.project(core, version),
+        deliveries,
+        drained: [],
+      };
     }
 
     // ---- 2. Classify. ------------------------------------------------------
     const verdict = this.classify(event, core);
     const appliedAt = new Date().toISOString();
-    let drained = 0;
 
     if (verdict === "buffer") {
       pending = [...pending, event];
-      processed[event.event_id] = { outcome: "buffered", version };
+      processed[event.event_id] = { outcome: "buffered", version, deliveries: 1 };
       await this.ctx.storage.put({ processed, pending });
-      return { outcome: "buffered", state: this.project(core, version), drained: 0 };
+      return {
+        outcome: "buffered",
+        state: this.project(core, version),
+        deliveries: 1,
+        drained: [],
+      };
     }
 
     if (verdict === "anomaly") {
       // Recorded, but money-truth is untouched.
-      processed[event.event_id] = { outcome: "anomaly", version };
+      processed[event.event_id] = { outcome: "anomaly", version, deliveries: 1 };
       await this.ctx.storage.put({ processed });
-      return { outcome: "anomaly", state: this.project(core, version), drained: 0 };
+      return {
+        outcome: "anomaly",
+        state: this.project(core, version),
+        deliveries: 1,
+        drained: [],
+      };
     }
 
     // ---- 3. Apply. ---------------------------------------------------------
     core = this.mutate(event, core);
     version += 1;
-    processed[event.event_id] = { outcome: "applied", version };
+    processed[event.event_id] = { outcome: "applied", version, deliveries: 1 };
     history.push({
       event_id: event.event_id,
       type: event.type,
@@ -243,6 +280,7 @@ export class OrderLedger extends DurableObject<Env> {
     // delivery_attempted, and draining the payment first leaves the `returned`
     // legal only on the next pass. Looping until no progress is the only
     // version that converges regardless of how deep the pile-up got.
+    const drained: string[] = [];
     let progress = true;
     while (progress) {
       progress = false;
@@ -252,8 +290,13 @@ export class OrderLedger extends DurableObject<Env> {
         if (this.classify(buffered, core) === "apply") {
           core = this.mutate(buffered, core);
           version += 1;
-          drained += 1;
-          processed[buffered.event_id] = { outcome: "applied", version };
+          drained.push(buffered.event_id);
+          // Preserve the delivery count the event accumulated while it waited.
+          processed[buffered.event_id] = {
+            ...processed[buffered.event_id]!,
+            outcome: "applied",
+            version,
+          };
           history.push({
             event_id: buffered.event_id,
             type: buffered.type,
@@ -276,7 +319,7 @@ export class OrderLedger extends DurableObject<Env> {
     // set not.
     await this.ctx.storage.put({ state: core, processed, history, pending, version });
 
-    return { outcome: "applied", state: this.project(core, version), drained };
+    return { outcome: "applied", state: this.project(core, version), deliveries: 1, drained };
   }
 
   /** The authoritative (CP) read, for the dashboard's projected-vs-truth toggle. */
@@ -293,6 +336,8 @@ export class OrderLedger extends DurableObject<Env> {
     history: HistoryEntry[];
     pending: CourierEvent[];
     processed_count: number;
+    /** Every event_id the ledger was handed more than once, and its verdict. */
+    duplicates: { event_id: string; outcome: EventOutcome; deliveries: number }[];
   }> {
     const stored = await this.ctx.storage.get<unknown>([
       "state",
@@ -310,6 +355,14 @@ export class OrderLedger extends DurableObject<Env> {
       history: (stored.get("history") as HistoryEntry[] | undefined) ?? [],
       pending: (stored.get("pending") as CourierEvent[] | undefined) ?? [],
       processed_count: Object.keys(processed).length,
+      duplicates: Object.entries(processed)
+        // `?? 1` covers a record written before delivery counting existed.
+        .filter(([, record]) => (record.deliveries ?? 1) > 1)
+        .map(([event_id, record]) => ({
+          event_id,
+          outcome: record.outcome,
+          deliveries: record.deliveries ?? 1,
+        })),
     };
   }
 }
