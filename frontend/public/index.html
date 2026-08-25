@@ -10,8 +10,10 @@
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Three faces, three jobs: serif for money and titles, sans for sentences
+         addressed to a person, mono for the machine's own vocabulary. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -34,99 +36,130 @@
     <div class="alert" id="alert" role="alert" hidden></div>
 
     <main id="main">
-      <!-- ================= DASHBOARD ================= -->
-      <section id="view-dashboard">
+      <!-- ================= DASHBOARD =================
+           Read order, top to bottom: what needs attention, then anything the
+           pipeline could not process, then booking a delivery, then the orders
+           themselves. The table is the tallest thing on the page, so anything
+           placed under it is effectively placed out of sight. -->
+      <section id="view-dashboard" class="stack">
         <div class="ledger-strip" id="summary"></div>
 
-        <section class="panel dlq" id="dead-letters" hidden></section>
+        <section class="panel panel--sheet dlq" id="dead-letters" hidden></section>
 
-        <div class="columns">
-          <aside class="panel panel--form">
+        <section class="panel panel--form">
+          <div class="form-body">
             <p class="eyebrow">New order</p>
             <h2 class="panel__title">Book a delivery</h2>
             <p class="panel__lede">
-              The amount you expect the courier to collect in cash. Events arrive later.
+              Enter the cash you expect the courier to collect. Their reports arrive
+              afterwards and settle the row in the table below.
             </p>
 
             <form id="order-form" novalidate>
-              <div class="field">
-                <label for="customer_name">Customer</label>
-                <input
-                  id="customer_name"
-                  name="customer_name"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Aakancha Thapa"
-                  required
-                />
-                <p class="field__error" data-error-for="customer_name"></p>
-              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="customer_name">Customer</label>
+                  <input
+                    id="customer_name"
+                    name="customer_name"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Aakancha Thapa"
+                    required
+                  />
+                  <p class="field__error" data-error-for="customer_name"></p>
+                </div>
 
-              <div class="field">
-                <label for="cod_amount">
-                  Expected on delivery <span class="field__unit" id="unit-hint"></span>
-                </label>
-                <input
-                  id="cod_amount"
-                  name="cod_amount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  inputmode="numeric"
-                  placeholder="1500"
-                  required
-                />
-                <p class="field__error" data-error-for="cod_amount"></p>
-              </div>
+                <div class="field">
+                  <label for="cod_amount">
+                    Expected on delivery <span class="field__unit" id="unit-hint"></span>
+                  </label>
+                  <input
+                    id="cod_amount"
+                    name="cod_amount"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputmode="numeric"
+                    placeholder="1500"
+                    required
+                  />
+                  <p class="field__error" data-error-for="cod_amount"></p>
+                </div>
 
-              <div class="field">
-                <label for="merchant_id">Merchant</label>
-                <input id="merchant_id" name="merchant_id" type="text" value="m1" required />
-                <p class="field__error" data-error-for="merchant_id"></p>
-              </div>
+                <div class="field">
+                  <label for="merchant_id">Merchant</label>
+                  <input id="merchant_id" name="merchant_id" type="text" value="m1" required />
+                  <p class="field__error" data-error-for="merchant_id"></p>
+                </div>
 
-              <button class="button" type="submit" id="create-button">Create order</button>
+                <div class="field field--submit">
+                  <button class="button" type="submit" id="create-button">Create order</button>
+                </div>
+              </div>
               <p class="form-receipt" id="form-receipt" aria-live="polite" hidden></p>
             </form>
-          </aside>
+          </div>
+        </section>
 
-          <section class="panel panel--table">
-            <div class="panel__head">
-              <div>
-                <p class="eyebrow">Orders</p>
-                <h2 class="panel__title">Expected against collected</h2>
-              </div>
-              <p class="zone" id="dashboard-zone"></p>
+        <section class="panel panel--sheet">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Orders</p>
+              <h2 class="panel__title">Collected against expected</h2>
+              <p class="bar-legend" aria-hidden="true">
+                <span><i data-key="collected"></i> collected so far</span>
+                <span><i data-key="expected"></i> what you expected</span>
+                <span><i data-key="over"></i> collected past that</span>
+              </p>
             </div>
-            <div class="table-scroll">
-              <table class="orders">
-                <thead>
-                  <tr>
-                    <th scope="col">Order</th>
-                    <th scope="col">Customer</th>
-                    <th scope="col" class="col-bar">Collected against expected</th>
-                    <th scope="col">Delivery</th>
-                    <th scope="col">Reconciliation</th>
-                  </tr>
-                </thead>
-                <tbody id="orders-body"></tbody>
-              </table>
+            <div class="zone-block">
+              <p class="zone explain" id="dashboard-zone"></p>
+              <p class="zone-note" id="dashboard-zone-note">
+                Refreshes every 2 seconds. A courier's report shows here within a few
+                seconds of arriving.
+              </p>
             </div>
-          </section>
-        </div>
+          </div>
+          <div class="table-scroll">
+            <table class="orders">
+              <colgroup>
+                <col class="col-order" />
+                <col class="col-customer" />
+                <col class="col-bar" />
+                <col class="col-diff" />
+                <col class="col-delivery" />
+                <col />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" class="head-order">Order</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Collected against expected</th>
+                  <th scope="col" class="th-right">Difference</th>
+                  <th scope="col" class="head-delivery">Delivery</th>
+                  <th scope="col">What this means</th>
+                </tr>
+              </thead>
+              <tbody id="orders-body"></tbody>
+            </table>
+          </div>
+        </section>
+
       </section>
 
       <!-- ================= ORDER DETAIL ================= -->
       <section id="view-detail" hidden>
-        <a class="back" href="#/">Back to all orders</a>
+        <a class="back" href="#/">&larr; Back to all orders</a>
         <div id="detail-body"></div>
       </section>
     </main>
 
     <footer class="footer">
       <span
-        >Async ingestion &rarr; CP ledger &rarr; eventually-consistent reads. Polling every
-        2&nbsp;seconds, so the lag is visible rather than hidden.</span
+        >Figures are read from a copy of the ledger that catches up within seconds of a
+        courier event, and the page polls every 2&nbsp;seconds — so the lag is visible
+        rather than hidden.</span
       >
       <span class="footer__api" id="api-base"></span>
     </footer>

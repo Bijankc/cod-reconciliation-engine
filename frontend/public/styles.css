@@ -4,35 +4,53 @@
    The subject is a cash book: two columns that are supposed to agree, and the
    work is finding the rows where they do not. Everything here serves that.
 
-   Ground is cool bond paper rather than warm cream, ink is navy-black, and rules
-   are the pale blue-grey of accounting paper. Colour is never the only carrier
-   of meaning — every state also has a word, and a discrepancy also has a flag.
+   THREE RULES HOLD THE WHOLE SHEET TOGETHER.
+
+   1. ONE ACCENT. Vermillion appears only where money and delivery disagree —
+      never as decoration, never on a heading, never on a control. If the page
+      is red anywhere, that is the thing to look at. Green, amber and indigo
+      survive only as small marks (a dot, a bar fill, a hairline); they never
+      fill a badge, because four filled colours is four things shouting.
+
+   2. THREE FACES, THREE JOBS. Serif is money and titles. Sans is sentences
+      addressed to a person. Mono is the machine's own vocabulary — ids, enum
+      names, timestamps, zone labels. A merchant does not have to be told this
+      to benefit from it: within a minute the typewriter text reads as "the
+      system's words, not mine", and the amounts read as money.
+
+   3. COLOUR IS NEVER THE ONLY SIGNAL. Every state also carries a word, and a
+      discrepancy also carries a flag and a full sentence in plain language.
    =========================================================================== */
 
 :root {
-  --paper: #e7ebf0;
-  --card: #fbfcfd;
-  --card-sunk: #f1f4f8;
-  --ink: #131922;
-  --ink-soft: #5a6675;
-  --ink-faint: #8b96a4;
-  --rule: #cbd4de;
-  --rule-strong: #a8b4c2;
+  /* Ground: cool bond paper, not warm cream. This is a cash book, not a menu. */
+  --paper: #e9ecf1;
+  --card: #ffffff;
+  --card-sunk: #f3f5f9;
+  --ink: #13171e;
+  --ink-soft: #58616f;
+  --ink-faint: #8c94a2;
+  --rule: #dde2e9;
+  --rule-strong: #c2cad5;
 
-  /* State. Green settled, amber in flight, vermillion flagged, indigo for the
-     authoritative ledger — the CP side of every projected/authoritative pair. */
-  --settled: #10614a;
-  --settled-wash: #dceee6;
-  --held: #8a5a05;
-  --held-wash: #f8ebd2;
-  --flag: #b92c22;
-  --flag-wash: #fadedb;
-  --cp: #2b3d9c;
-  --cp-wash: #dfe3f7;
+  /* THE accent. Reserved for money that disagrees with delivery. */
+  --flag: #b0241a;
+  --flag-deep: #8b1a12;
+  --flag-wash: #fdf1ef;
+  --flag-edge: #eec8c2;
 
-  --shadow: 0 1px 2px rgb(19 25 34 / 6%), 0 8px 24px -16px rgb(19 25 34 / 28%);
-  --radius: 3px;
+  /* Support marks. Never a filled background — a dot, a rule, a bar. */
+  --settled: #2d6a51;
+  --held: #8a6112;
+  --held-wash: #fbf4e6;
+  --cp: #38446e;
+  --cp-wash: #eceef6;
 
+  --radius: 4px;
+  --radius-tight: 2px;
+  --sheet: 0 1px 1px rgb(19 23 30 / 4%), 0 10px 30px -22px rgb(19 23 30 / 35%);
+
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
   --sans: "Archivo", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
@@ -49,7 +67,7 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: 0.9375rem;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -57,7 +75,8 @@ h1,
 h2,
 h3,
 p,
-figure {
+figure,
+ul {
   margin: 0;
 }
 
@@ -81,26 +100,33 @@ a {
   z-index: 10;
   background: var(--card);
   padding: 0.5rem 0.75rem;
-  box-shadow: var(--shadow);
+  box-shadow: var(--sheet);
 }
 
-/* --- The mono utility voice: eyebrows, zone labels, every figure. ---------- */
+/* --- Voice 3: the machine's vocabulary ------------------------------------ */
 .eyebrow,
 .zone,
 .badge,
 .mono,
-th,
 .freshness {
   font-family: var(--mono);
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.13em;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .eyebrow {
   color: var(--ink-faint);
-  margin-bottom: 0.35rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+/* A dotted underline is the page's one signal for "hover me for plain words". */
+.explain {
+  text-decoration: underline dotted var(--rule-strong);
+  text-underline-offset: 3px;
+  cursor: help;
 }
 
 /* --- Masthead ------------------------------------------------------------- */
@@ -110,7 +136,7 @@ th,
   gap: 1rem;
   align-items: center;
   justify-content: space-between;
-  padding: 1.15rem clamp(1rem, 4vw, 2.5rem);
+  padding: 1.1rem clamp(1rem, 4vw, 2.5rem);
   border-bottom: 1px solid var(--rule);
   background: var(--card);
 }
@@ -118,22 +144,22 @@ th,
 .wordmark {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.7rem;
 }
 
 /* A double rule — the cash book's own device for "totals below this line". */
 .wordmark__rule {
-  width: 26px;
-  height: 9px;
+  width: 24px;
+  height: 8px;
   border-top: 2px solid var(--ink);
   border-bottom: 2px solid var(--ink);
 }
 
 .wordmark__text {
-  font-weight: 800;
-  font-size: clamp(1rem, 2.2vw, 1.2rem);
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.1875rem;
+  letter-spacing: -0.01em;
 }
 
 .freshness {
@@ -141,6 +167,8 @@ th,
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  text-transform: none;
+  letter-spacing: 0.04em;
 }
 
 .freshness::before {
@@ -149,6 +177,7 @@ th,
   height: 7px;
   border-radius: 50%;
   background: var(--settled);
+  flex: none;
 }
 
 .freshness[data-state="stale"]::before {
@@ -158,7 +187,7 @@ th,
   background: var(--flag);
 }
 
-/* A single tick per poll, so eventual consistency has a heartbeat you can see. */
+/* One tick per poll, so eventual consistency has a heartbeat you can see. */
 .freshness[data-pulse="on"]::before {
   animation: tick 600ms ease-out;
 }
@@ -179,8 +208,10 @@ th,
   margin: 1rem clamp(1rem, 4vw, 2.5rem) 0;
   padding: 0.85rem 1rem;
   background: var(--flag-wash);
+  border: 1px solid var(--flag-edge);
   border-left: 3px solid var(--flag);
-  color: #7c1c16;
+  border-radius: var(--radius);
+  color: var(--flag-deep);
   font-size: 0.875rem;
 }
 
@@ -192,38 +223,29 @@ th,
 /* --- Layout --------------------------------------------------------------- */
 main {
   padding: clamp(1rem, 3vw, 1.75rem) clamp(1rem, 4vw, 2.5rem) 3rem;
-  max-width: 1320px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
-.columns {
+.stack {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 1.25rem;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  gap: 1.5rem;
 }
 
 .panel {
   background: var(--card);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
 }
 
-.panel--form {
-  padding: 1.25rem;
+.panel--sheet {
+  box-shadow: var(--sheet);
 }
 
 .panel__head {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.75rem 1.5rem;
   align-items: flex-end;
   justify-content: space-between;
   padding: 1.1rem 1.25rem;
@@ -231,45 +253,72 @@ main {
 }
 
 .panel__title {
-  font-size: 1.0625rem;
+  font-family: var(--serif);
+  font-size: 1.1875rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
 }
 
 .panel__lede {
   color: var(--ink-soft);
   font-size: 0.8125rem;
-  margin-top: 0.4rem;
+  margin-top: 0.35rem;
+  max-width: 68ch;
 }
 
 /* The zone label is not decoration: it is the API's own `source` and
-   `consistency` fields, printed where the data lands. */
+   `consistency` fields, printed where the data lands. The plain line beneath it
+   is what a merchant actually needs from it. */
+.zone-block {
+  text-align: right;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: end;
+}
+
 .zone {
   color: var(--ink-faint);
-  font-weight: 500;
   letter-spacing: 0.1em;
 }
 
-/* --- Summary strip -------------------------------------------------------- */
+.zone-note {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  max-width: 34ch;
+  text-align: right;
+}
+
+/* ===========================================================================
+   THE SUMMARY BAND — the one-second answer.
+
+   Not four equal tiles. The first cell is twice the width, carries the only red
+   on a calm page, and states both halves of the question a merchant has when
+   they open this: how many, and how much.
+   =========================================================================== */
 .ledger-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: minmax(0, 1.9fr) repeat(3, minmax(0, 1fr));
   gap: 1px;
   background: var(--rule);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 1.25rem;
-  box-shadow: var(--shadow);
+  box-shadow: var(--sheet);
+}
+
+@media (max-width: 900px) {
+  .ledger-strip {
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  }
+  .tally--lead {
+    grid-column: 1 / -1;
+  }
 }
 
 .tally {
   background: var(--card);
-  padding: 0.95rem 1.15rem;
-}
-
-.tally--flagged {
-  background: var(--flag-wash);
+  padding: 1rem 1.15rem 1.1rem;
 }
 
 .tally__label {
@@ -281,32 +330,515 @@ main {
   color: var(--ink-faint);
 }
 
-.tally--flagged .tally__label {
-  color: #8f231b;
-}
-
 .tally__value {
-  font-family: var(--mono);
-  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  font-family: var(--serif);
+  font-size: 1.75rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-top: 0.2rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.tally--flagged .tally__value {
-  color: var(--flag);
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin-top: 0.35rem;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .tally__note {
   font-size: 0.75rem;
   color: var(--ink-soft);
-  margin-top: 0.1rem;
+  margin-top: 0.3rem;
 }
 
-/* --- Form ----------------------------------------------------------------- */
-.field {
-  margin-bottom: 0.9rem;
+/* The lead cell: bigger type, and the only place the accent is allowed to sit
+   on a whole surface. */
+.tally--lead {
+  padding: 1.15rem 1.35rem 1.25rem;
+}
+
+.tally--lead .tally__value {
+  font-size: clamp(2.5rem, 5.5vw, 3.375rem);
+  line-height: 1;
+  margin-top: 0.15rem;
+}
+
+.tally--lead .tally__note {
+  font-size: 0.875rem;
+  margin-top: 0.45rem;
+  max-width: 48ch;
+}
+
+.tally--flagged {
+  background: var(--flag-wash);
+}
+
+.tally--flagged .tally__label,
+.tally--flagged .tally__value {
+  color: var(--flag);
+}
+
+.tally--flagged .tally__note {
+  color: var(--flag-deep);
+}
+
+/* The money at stake, set on the same line as the count so the two halves of
+   the answer arrive together. */
+.tally__stake {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  color: var(--flag-deep);
+  margin-left: 0.6rem;
+}
+
+.tally__stake small {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--flag-deep);
+  margin-left: 0.2rem;
+}
+
+.tally--settled-all .tally__value {
+  color: var(--settled);
+}
+
+/* ===========================================================================
+   THE ORDERS TABLE — the working surface.
+   =========================================================================== */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.orders {
+  width: 100%;
+  min-width: 940px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.orders th {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-faint);
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--rule-strong);
+  vertical-align: bottom;
+}
+
+.orders td {
+  padding: 1rem 0.85rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.orders tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.orders tbody tr:hover {
+  background: var(--card-sunk);
+}
+
+/* A flagged row: a calm wash, a hard accent edge, and a red amount. Three
+   signals, only one of which is colour. */
+.orders tr[data-flagged="true"] {
+  background: var(--flag-wash);
+}
+
+.orders tr[data-flagged="true"]:hover {
+  background: #fbe7e3;
+}
+
+.orders tr[data-flagged="true"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--flag);
+}
+
+.col-order {
+  width: 92px;
+}
+.col-customer {
+  width: 16%;
+}
+.col-bar {
+  width: 27%;
+}
+.col-diff {
+  width: 138px;
+}
+.col-delivery {
+  width: 118px;
+}
+
+.th-right {
+  text-align: right;
+}
+
+/* Order ids are for machines. Six characters is enough to match one against a
+   courier's spreadsheet; the full hash is on hover and on the detail page. */
+.order-chip {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: var(--ink-soft);
+  background: var(--card-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-tight);
+  padding: 0.2rem 0.4rem;
+  display: inline-block;
+}
+
+.order-chip:hover {
+  color: var(--cp);
+  border-color: var(--rule-strong);
+  background: var(--cp-wash);
+}
+
+.customer {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.customer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.customer a:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.empty strong {
+  display: block;
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  color: var(--ink);
+  margin-bottom: 0.3rem;
+}
+
+/* --- The difference column: a statement's right-hand edge ------------------ */
+.diff {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.diff__amount {
+  font-family: var(--serif);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  display: block;
+}
+
+.diff__word {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-top: 0.05rem;
+}
+
+.diff[data-tone="flag"] .diff__amount {
+  color: var(--flag);
+}
+.diff[data-tone="flag"] .diff__word {
+  color: var(--flag-deep);
+}
+.diff[data-tone="held"] .diff__amount {
+  color: var(--held);
+}
+
+.diff__none {
+  color: var(--ink-faint);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+}
+
+/* --- Delivery: a word and a dot, never a filled badge ---------------------- */
+.delivery {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+.delivery::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: none;
+  transform: translateY(-1px);
+}
+
+.delivery[data-status="DELIVERED"]::before {
+  background: var(--settled);
+}
+.delivery[data-status="RETURNED"]::before {
+  background: var(--held);
+}
+.delivery[data-status="DISPATCHED"]::before {
+  background: var(--cp);
+}
+
+/* --- What this means: the column the tool exists for ----------------------- */
+/*
+   Nothing here is clipped and nothing is nowrap. The plain-language headline is
+   the biggest thing in the cell; the sentence under it says what to do; the
+   system's own labels sit at the bottom in the machine voice — kept because
+   they are authoritative, demoted because a merchant does not read them.
+*/
+.means {
+  max-width: 48ch;
+}
+
+.means__headline {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.means__headline .flagmark {
+  color: var(--flag);
+  font-size: 0.8125rem;
+  margin-right: 0.3rem;
+}
+
+.means[data-tone="flag"] .means__headline {
+  color: var(--flag);
+}
+
+.means__sentence {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+  margin-top: 0.15rem;
+}
+
+.means[data-tone="flag"] .means__sentence {
+  color: var(--flag-deep);
+}
+
+.means__sys {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 0.45rem;
+}
+
+.means[data-tone="flag"] .means__sys {
+  color: #b98d87;
+}
+
+/* ===========================================================================
+   THE SIGNATURE: the reconciliation bar.
+
+   Collected and expected share ONE scale, so the bar is a true comparison
+   rather than a percentage. The expected line sits wherever expected falls on
+   that scale — which means an overpayment physically OVERSHOOTS it, because the
+   ledger never clamps and neither does its picture. The overshoot is hatched so
+   it reads as "past the line", not as "more progress".
+   =========================================================================== */
+.recbar {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.recbar__figures {
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1.2;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.recbar__collected {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.recbar__expected-text {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.recbar__track {
+  position: relative;
+  height: 16px;
+  background: var(--card-sunk);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-tight);
+}
+
+.recbar__clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.recbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--collected-pct) * 1%);
+  background: var(--bar-color, var(--ink-faint));
+}
+
+/* Everything past the expected line, drawn as hatch in the accent. */
+.recbar__over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--expected-pct) * 1%);
+  width: calc((var(--collected-pct) - var(--expected-pct)) * 1%);
+  background: repeating-linear-gradient(-45deg, var(--flag) 0 3px, #d4574d 3px 6px);
+}
+
+/* The expected line: where the courier's obligation ends. Taller than the track
+   on purpose — it is a target, not part of the fill. */
+.recbar__expected {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  left: calc(var(--expected-pct) * 1%);
+  width: 2px;
+  background: var(--ink);
+  transform: translateX(-1px);
+}
+
+.recbar__expected::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -3px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid var(--ink);
+}
+
+/* The legend, printed once, above the column it explains. */
+.bar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.9rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  text-transform: none;
+  font-weight: 400;
+  margin-top: 0.4rem;
+}
+
+.bar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.bar-legend i {
+  width: 14px;
+  height: 9px;
+  display: inline-block;
+  border: 1px solid var(--rule-strong);
+  background: var(--card-sunk);
+}
+
+.bar-legend i[data-key="collected"] {
+  background: var(--ink-faint);
+  border-color: var(--ink-faint);
+}
+
+.bar-legend i[data-key="expected"] {
+  width: 2px;
+  height: 12px;
+  background: var(--ink);
+  border: 0;
+}
+
+.bar-legend i[data-key="over"] {
+  background: repeating-linear-gradient(-45deg, var(--flag) 0 3px, #d4574d 3px 6px);
+  border-color: var(--flag);
+}
+
+/* --- Badges: outlines, not fills. Only the flag tone gets a wash. ---------- */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-tight);
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule-strong);
+}
+
+.badge[data-tone="settled"] {
+  color: var(--settled);
+  border-color: #b9d2c6;
+}
+
+.badge[data-tone="held"] {
+  color: var(--held);
+  border-color: #ddc79a;
+}
+
+.badge[data-tone="flag"] {
+  color: var(--flag);
+  border-color: var(--flag-edge);
+  background: var(--flag-wash);
+}
+
+.badge[data-tone="cp"] {
+  color: var(--cp);
+  border-color: #c3c9de;
+}
+
+/* ===========================================================================
+   Book a delivery — deliberately the quietest panel on the page. It is an
+   action you take after reading, so it reads after the table.
+   =========================================================================== */
+.panel--form {
+  background: var(--card-sunk);
+}
+
+.form-body {
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+  gap: 0.85rem;
+  align-items: start;
+  margin-top: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .field label {
@@ -321,18 +853,18 @@ main {
   font-size: 0.6875rem;
   color: var(--ink-faint);
   letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .field input {
   width: 100%;
-  padding: 0.5rem 0.6rem;
-  font: inherit;
+  padding: 0.55rem 0.65rem;
   font-family: var(--mono);
   font-size: 0.875rem;
   color: var(--ink);
-  background: var(--card-sunk);
+  background: var(--card);
   border: 1px solid var(--rule-strong);
-  border-radius: var(--radius);
+  border-radius: var(--radius-tight);
 }
 
 .field input::placeholder {
@@ -343,21 +875,18 @@ main {
   color: var(--flag);
   font-size: 0.75rem;
   margin-top: 0.25rem;
-  min-height: 0;
 }
 
 .button {
-  width: 100%;
-  padding: 0.6rem 1rem;
-  font-family: var(--mono);
-  font-size: 0.75rem;
+  padding: 0.6rem 1.15rem;
+  font-family: var(--sans);
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--card);
   background: var(--ink);
   border: 1px solid var(--ink);
-  border-radius: var(--radius);
+  border-radius: var(--radius-tight);
   cursor: pointer;
 }
 
@@ -370,241 +899,174 @@ main {
   cursor: progress;
 }
 
+.field--submit {
+  align-self: end;
+}
+
+.field--submit .button {
+  width: 100%;
+}
+
 .form-receipt {
-  margin-top: 0.75rem;
-  padding: 0.6rem 0.7rem;
-  background: var(--settled-wash);
+  margin-top: 0.85rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
   border-left: 3px solid var(--settled);
+  border-radius: var(--radius-tight);
   font-size: 0.8125rem;
 }
 
 .form-receipt code {
   font-family: var(--mono);
-  font-size: 0.8125rem;
-}
-
-/* --- Orders table --------------------------------------------------------- */
-.table-scroll {
-  overflow-x: auto;
-}
-
-.orders {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.orders th {
-  text-align: left;
-  color: var(--ink-faint);
-  font-weight: 600;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--rule);
-  white-space: nowrap;
-}
-
-.orders td {
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--rule);
-  vertical-align: middle;
-}
-
-.orders tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.orders tbody tr:hover {
-  background: var(--card-sunk);
-}
-
-.orders tr[data-flagged="true"] {
-  background: var(--flag-wash);
-}
-
-.orders tr[data-flagged="true"]:hover {
-  background: #f6d3cf;
-}
-
-.col-bar {
-  width: 34%;
-  min-width: 230px;
-}
-
-.order-link {
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  text-decoration: none;
-  color: var(--cp);
-}
-
-.order-link:hover {
-  text-decoration: underline;
-}
-
-.customer {
-  white-space: nowrap;
-}
-
-.empty {
-  padding: 2.5rem 1.25rem;
-  text-align: center;
-  color: var(--ink-soft);
-}
-
-.empty strong {
-  display: block;
-  color: var(--ink);
-  margin-bottom: 0.3rem;
-}
-
-/* --- THE SIGNATURE: the reconciliation bar -------------------------------- */
-/*
-   Collected and expected share one scale, so the bar is a true comparison
-   rather than a percentage. The expected line sits wherever expected falls on
-   that scale — which means an overpayment physically OVERSHOOTS it, because
-   the ledger never clamps and neither does its picture.
-*/
-.recbar {
-  display: grid;
-  gap: 0.3rem;
-}
-
-.recbar__track {
-  position: relative;
-  height: 10px;
-  background: var(--card-sunk);
-  border: 1px solid var(--rule);
-  border-radius: 1px;
-  overflow: hidden;
-}
-
-.recbar__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: calc(var(--collected-pct) * 1%);
-  background: var(--bar-color, var(--ink-faint));
-}
-
-/* The expected line: where the courier's obligation ends. */
-.recbar__expected {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  left: calc(var(--expected-pct) * 1%);
-  width: 2px;
-  background: var(--ink);
-  transform: translateX(-1px);
-}
-
-.recbar__figures {
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.recbar__figures b {
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.recbar__gap {
-  color: var(--flag);
-  font-weight: 600;
-}
-
-/* --- Badges --------------------------------------------------------------- */
-.badge {
-  display: inline-block;
-  padding: 0.2rem 0.45rem;
-  border-radius: 2px;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-  background: var(--card-sunk);
-  color: var(--ink-soft);
-  border: 1px solid var(--rule);
-}
-
-.badge[data-tone="settled"] {
-  background: var(--settled-wash);
-  color: var(--settled);
-  border-color: #b6dccc;
-}
-
-.badge[data-tone="held"] {
-  background: var(--held-wash);
-  color: var(--held);
-  border-color: #e6cf9d;
-}
-
-.badge[data-tone="flag"] {
-  background: var(--flag-wash);
-  color: var(--flag);
-  border-color: #edbcb7;
-}
-
-.badge[data-tone="cp"] {
-  background: var(--cp-wash);
-  color: var(--cp);
-  border-color: #bdc5ee;
-}
-
-.reason {
-  display: block;
-  font-family: var(--sans);
   font-size: 0.75rem;
-  text-transform: none;
-  letter-spacing: 0;
-  color: #8f231b;
-  margin-top: 0.3rem;
-  max-width: 30ch;
-  white-space: normal;
 }
 
-/* --- Detail view ---------------------------------------------------------- */
+/* ===========================================================================
+   Detail view
+   =========================================================================== */
 .back {
   display: inline-block;
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  font-weight: 500;
   text-decoration: none;
-  margin-bottom: 1rem;
+  margin-bottom: 1.1rem;
 }
 
 .back:hover {
   text-decoration: underline;
 }
 
+/* The name first. A merchant recognises "Deepa Maharjan"; nobody recognises a
+   twenty-character hash, so the hash is a chip underneath with a copy button. */
 .detail-head {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
 }
 
 .detail-head h1 {
-  font-family: var(--mono);
-  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 4vw, 2.375rem);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
-.detail-head p {
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  margin-top: 0.6rem;
+  font-size: 0.8125rem;
   color: var(--ink-soft);
-  font-size: 0.875rem;
-  margin-top: 0.25rem;
+}
+
+.id-chip {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-tight);
+  padding: 0.2rem 0.45rem;
+  color: var(--ink-soft);
+}
+
+.copy-id {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--cp);
+  background: transparent;
+  border: 0;
+  padding: 0.2rem 0.1rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* The verdict banner: on a detail page there is room to say the whole thing in
+   a sentence, so it leads and everything else supports it. */
+.verdict {
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 1.15rem 1.35rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.verdict[data-tone="flag"] {
+  background: var(--flag-wash);
+  border-color: var(--flag-edge);
+  border-left-color: var(--flag);
+}
+
+.verdict[data-tone="settled"] {
+  border-left-color: var(--settled);
+}
+
+.verdict[data-tone="held"] {
+  border-left-color: var(--held);
+}
+
+.verdict__headline {
+  font-family: var(--serif);
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.verdict[data-tone="flag"] .verdict__headline {
+  color: var(--flag);
+}
+
+.verdict__sentence {
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+  margin-top: 0.35rem;
+  max-width: 72ch;
+}
+
+.verdict[data-tone="flag"] .verdict__sentence {
+  color: var(--flag-deep);
+}
+
+.verdict__sys {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 0.7rem;
 }
 
 .compare {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.25rem;
   margin-bottom: 1.25rem;
   align-items: start;
 }
 
 .book {
-  padding: 1.1rem 1.25rem 1.25rem;
+  padding: 1.15rem 1.35rem 1.35rem;
+}
+
+.book__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.95rem;
+}
+
+.book__caption {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  margin-top: 0.3rem;
+  max-width: 54ch;
 }
 
 /* Ruled paper, and ONLY here: this panel is the book of record. */
@@ -616,34 +1078,53 @@ main {
     var(--cp-wash) 27px,
     var(--cp-wash) 28px
   );
-  border-color: #bdc5ee;
+  border-color: #c9cfe1;
 }
 
 .book__figures {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.75rem 1rem;
-  margin-top: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.95rem 1.25rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--rule);
 }
 
 .figure__label {
   font-family: var(--mono);
   font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
 
 .figure__value {
-  font-family: var(--mono);
-  font-size: 1.0625rem;
+  font-family: var(--serif);
+  font-size: 1.75rem;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-top: 0.1rem;
 }
 
-/* --- The projected / authoritative switch --------------------------------- */
+.figure__value--word {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.figure__value[data-tone="flag"] {
+  color: var(--flag);
+}
+
+.figure__note {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* --- The projected / authoritative switch ---------------------------------- */
 .switch {
   display: flex;
   align-items: flex-start;
@@ -677,33 +1158,34 @@ main {
 .divergence {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
+  gap: 0.4rem 1.5rem;
   align-items: center;
   padding: 0.7rem 1rem;
   border-radius: var(--radius);
   margin-bottom: 1.25rem;
   font-size: 0.8125rem;
-  border: 1px solid;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule-strong);
+  color: var(--ink-soft);
 }
 
 .divergence[data-converged="true"] {
-  background: var(--settled-wash);
-  border-color: #b6dccc;
-  color: var(--settled);
+  border-left-color: var(--settled);
 }
 
 .divergence[data-converged="false"] {
+  border-left-color: var(--held);
   background: var(--held-wash);
-  border-color: #e6cf9d;
-  color: var(--held);
 }
 
 .divergence b {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
 
-/* --- Timeline ------------------------------------------------------------- */
+/* --- Timeline -------------------------------------------------------------- */
 .timeline {
   width: 100%;
   border-collapse: collapse;
@@ -715,22 +1197,35 @@ main {
   font-family: var(--mono);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--rule);
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--rule-strong);
   white-space: nowrap;
 }
 
 .timeline td {
-  padding: 0.6rem 1rem;
+  padding: 0.8rem 1rem;
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
 
 .timeline tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.event-plain {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Inside the timeline's first cell the id sits on its own line under the
+   machine name; the Happened/Received columns are `td.stamp` and unaffected. */
+.timeline td .stamp {
+  display: block;
+  margin-top: 0.1rem;
 }
 
 .stamp {
@@ -743,8 +1238,12 @@ main {
 
 .event-type {
   font-family: var(--mono);
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: block;
+  margin-top: 0.25rem;
 }
 
 .repeat {
@@ -752,18 +1251,26 @@ main {
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--held);
-  background: var(--held-wash);
-  border: 1px solid #e6cf9d;
-  border-radius: 2px;
+  border: 1px solid #ddc79a;
+  border-radius: var(--radius-tight);
   padding: 0.05rem 0.3rem;
   margin-left: 0.35rem;
   white-space: nowrap;
 }
 
 .money-cell {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
   white-space: nowrap;
+  text-align: right;
+}
+
+.money-cell[data-empty="true"] {
+  font-size: 1rem;
+  color: var(--ink-faint);
+  font-weight: 400;
 }
 
 .raw-link {
@@ -779,7 +1286,7 @@ main {
 }
 
 .held-list {
-  margin: 0.6rem 0 0;
+  margin: 0.7rem 0 0;
   padding: 0;
   list-style: none;
   display: grid;
@@ -788,13 +1295,14 @@ main {
 
 .held-list li {
   font-family: var(--mono);
-  font-size: 0.8125rem;
-  padding: 0.35rem 0.5rem;
-  background: var(--held-wash);
-  border-left: 2px solid var(--held);
+  font-size: 0.75rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--card-sunk);
+  border-left: 2px solid var(--rule-strong);
+  border-radius: 0 var(--radius-tight) var(--radius-tight) 0;
 }
 
-/* --- Footer --------------------------------------------------------------- */
+/* --- Footer ---------------------------------------------------------------- */
 .footer {
   display: flex;
   flex-wrap: wrap;
@@ -817,12 +1325,11 @@ main {
   }
 }
 
-/* --- Simulator ------------------------------------------------------------ */
-/*
-   The simulator is a control surface sitting inside a reading surface, so it is
-   given the one visual device nothing else on the page uses: a heavier top rule
-   in the CP indigo. It reads as an instrument panel rather than another card.
-*/
+/* ===========================================================================
+   Simulator — a control surface sitting inside a reading surface, so it is
+   given the one device nothing else on the page uses: a heavy top rule in the
+   CP indigo. It reads as an instrument panel rather than another card.
+   =========================================================================== */
 .sim {
   border-top: 3px solid var(--cp);
   margin-bottom: 1.25rem;
@@ -833,8 +1340,6 @@ main {
 }
 
 .sim[data-busy="true"] {
-  /* A running scenario has deliberate pauses in it; say so rather than looking
-     frozen. */
   cursor: progress;
 }
 
@@ -850,12 +1355,9 @@ main {
   gap: 0.2rem;
   text-align: left;
   padding: 0.6rem 0.75rem;
-  text-transform: none;
-  letter-spacing: 0;
-  font-family: var(--sans);
   font-size: 0.875rem;
   font-weight: 600;
-  background: var(--card-sunk);
+  background: var(--card);
   color: var(--ink);
   border-color: var(--rule-strong);
 }
@@ -866,10 +1368,9 @@ main {
 }
 
 .button--scenario span {
-  font-family: var(--mono);
-  font-size: 0.6875rem;
+  font-family: var(--sans);
+  font-size: 0.75rem;
   font-weight: 400;
-  letter-spacing: 0.02em;
   color: var(--ink-soft);
 }
 
@@ -880,7 +1381,7 @@ main {
 }
 
 .button--danger:hover {
-  background: #9d251c;
+  background: var(--flag-deep);
 }
 
 .sim__custom,
@@ -895,7 +1396,7 @@ main {
   font-family: var(--mono);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-soft);
   cursor: pointer;
@@ -931,7 +1432,7 @@ main {
   color: var(--ink);
   background: var(--card-sunk);
   border: 1px solid var(--rule-strong);
-  border-radius: var(--radius);
+  border-radius: var(--radius-tight);
 }
 
 .sim__secret {
@@ -962,7 +1463,6 @@ main {
   font-family: var(--mono);
 }
 
-/* --- Simulator log -------------------------------------------------------- */
 .sim-log {
   list-style: none;
   margin: 1.1rem 0 0;
@@ -986,7 +1486,6 @@ main {
 
 .sim-log li[data-tone="good"] {
   border-left-color: var(--settled);
-  background: var(--settled-wash);
 }
 
 .sim-log li[data-tone="bad"] {
@@ -996,7 +1495,6 @@ main {
 
 .sim-log li[data-tone="wait"] {
   border-left-color: var(--held);
-  background: var(--held-wash);
 }
 
 .sim-log__time {
@@ -1009,10 +1507,9 @@ main {
   border-left-color: transparent;
 }
 
-/* --- Dead-letter panel ---------------------------------------------------- */
+/* --- Dead-letter panel ----------------------------------------------------- */
 .dlq {
-  border-left: 3px solid var(--flag);
-  margin-bottom: 1.25rem;
+  border-left: 4px solid var(--flag);
 }
 
 .dlq__body {
@@ -1022,4 +1519,23 @@ main {
 .dlq .held-list li {
   background: var(--flag-wash);
   border-left-color: var(--flag);
+}
+
+/* --- Narrow screens: drop the two columns whose content already repeats in
+       the "what this means" cell, rather than letting anything clip. -------- */
+@media (max-width: 1080px) {
+  .orders {
+    min-width: 700px;
+  }
+  .col-order,
+  .col-delivery,
+  .orders td.cell-order,
+  .orders td.cell-delivery,
+  .orders th.head-order,
+  .orders th.head-delivery {
+    display: none;
+  }
+  .orders tr[data-flagged="true"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--flag);
+  }
 }
