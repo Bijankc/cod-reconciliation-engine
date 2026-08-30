@@ -1,18 +1,33 @@
 # COD Reconciliation Engine
 
-An async trust layer for cash-on-delivery orders in Nepali e-commerce.
+## What this is and why
+
+An async trust layer for cash-on-delivery orders in Nepali e-commerce: it ingests late,
+duplicated, out-of-order courier events and converges every order onto a single money-truth.
+
+Workers + Queue + Durable Object + D1 + R2 + Pages, all on the Cloudflare free plan.
+
+- **A Durable Object per order holds the ledger.** It's single-threaded, so two concurrent
+  payments can't cause a lost update; D1 alone can't serialise the decide-then-accrue step.
+- **A Queue sits in front of the ledger.** The webhook answers `202` in milliseconds, so our
+  latency never becomes the courier's timeout — and a timeout is what spawns duplicates.
+- **`event_id` is the idempotency key.** At-least-once delivery makes duplicates certain rather
+  than hypothetical.
+- **D1 for reads, R2 for the audit log.** A CQRS split: relational dashboard queries on one
+  side, write-once opaque payloads on the other.
+- **Everything that can be eventually consistent is** — the dashboard — and strong consistency
+  is spent only where the money lives, in the ledger.
+
+Everything below elaborates on those five.
+
+---
 
 A COD order shows `delivered` on one system and `returned` on another. A payment gets counted
 twice because the courier's webhook fired twice. Reconciliation is the act of arriving at one
-true answer. This system ingests late, out-of-order, duplicated courier events and converges
-every order onto a single money-truth.
+true answer.
 
-Async at-least-once ingestion, then a CP ledger, then eventually-consistent reads.
-
-Everything runs on the Cloudflare **free** plan: Workers, Queues, Durable Objects, D1, R2 and
-Pages. Everything is verified against local emulation only. I have never created a Cloudflare
-resource for it, and [Deferred to deploy](#deferred-to-deploy) says exactly what that leaves
-unsettled.
+Everything is verified against local emulation only. I have never created a Cloudflare resource
+for it, and [Deferred to deploy](#deferred-to-deploy) says exactly what that leaves unsettled.
 
 Four scripts stand behind the claims below:
 
@@ -209,17 +224,14 @@ verbatim request bytes that verdict was formed from.
 
 ## Reliability primitives
 
-| Primitive | Where it lives | The failure it prevents |
-|---|---|---|
-| **Idempotency key** | `event_id` dedup in `OrderLedger` | A `payment_collected` processed twice double-counting cash. |
-| **At-least-once handling** | Consumer and ledger are both idempotent | A redelivered message changing the outcome on its second run. |
-| **Retry on transient failure** | `message.retry()` in `consumeBatch` | A D1 hiccup silently losing a courier event. |
-| **Dead-letter queue** | `courier-events-dlq` + its consumer → `dead_letters` | One poison message blocking everything behind it. |
-| **Fast ack** | `202` from the webhook before any storage work | Our latency becoming the courier's timeout. |
-| **Backpressure** | The queue itself, consumer concurrency as the knob | A burst of events landing directly on the ledger. |
-| **Deterministic ordering** | State machine + pending buffer + eviction | Arrival order deciding the outcome. |
-| **Monotonic projection guard** | `WHERE projection_version < ?` | A late write rewinding the read model. |
-| **Schema versioning** | `schema_version`, additive-only, raw bytes kept in R2 | A new optional field breaking ingestion or being dropped. |
+The two sections above already cover fast ack, retries, backpressure and at-least-once
+handling. Four more carry their own weight. The **idempotency key** is `event_id`, deduped
+inside `OrderLedger`, so a `payment_collected` processed twice never double-counts cash. The
+**dead-letter queue** — `courier-events-dlq` and its consumer, writing to `dead_letters` — keeps
+one poison message from blocking everything behind it. **Deterministic ordering** comes from the
+state machine, the pending buffer and buffer eviction together, so arrival order never decides
+the outcome. And the **monotonic projection guard**, `WHERE projection_version < ?`, stops a
+late write from rewinding the read model.
 
 ---
 
@@ -289,17 +301,11 @@ body, so a caller never has to guess whether it's holding truth or a copy.
 
 ## Free-tier limits
 
-| Primitive | Free-plan limit | What this system spends |
-|---|---|---|
-| **Workers** | 100,000 requests/day, 10 ms CPU per invocation | The webhook validates and enqueues, so microseconds of CPU. Dashboard polling drives the volume. |
-| **Durable Objects** | 100,000 requests/day, 13,000 GB-s/day, 5 GB SQLite | One request per courier event plus one per authoritative read, drawn from the same pool the Worker spends from. |
-| **Queues** | 10,000 operations/day, 24-hour retention | About 3 ops per event, so roughly 3,300 events/day. A poison event costs 9–10. |
-| **D1** | 5 GB storage, 5M rows read/day, 100k written/day | Two row writes per event: the guarded projection and the timeline row. |
-| **R2** | 10 GB-month, 1M Class A ops/month, 10M Class B, free egress | One small JSON write per event. |
-| **Pages** | Unlimited requests and bandwidth, 500 builds/month | Static console. Never a constraint. |
-
-The shared 100,000 requests/day is what binds, which makes the poll interval a real design
-parameter. A 1-second poll across 20 open dashboards is 1.7M requests/day on its own.
+Everything fits the free plan comfortably: two row writes and one small R2 object per event,
+about three queue operations per event, and microseconds of Worker CPU. What binds is the
+shared 100,000 requests/day that the Worker and the Durable Objects both spend from, which
+makes the dashboard's poll interval a real design parameter — a 1-second poll across 20 open
+dashboards is 1.7M requests/day on its own.
 
 ---
 
@@ -389,67 +395,11 @@ redeploy the Worker, or the dashboard will load and stay empty.
 
 ## Deferred to deploy
 
-Local emulation is faithful enough to prove application logic, and everything above is proven
-that way. Four things need a real account to confirm. The DLQ hand-off works locally
-(`verify:dlq` shows six attempts and a `dead_letters` row about 36 seconds later) but the local
-queue is its own implementation; retry backoff timing is Cloudflare's and won't match that 36
-seconds; `verify:cors` sends browser-shaped headers from a script, which is different from a
-browser enforcing same-origin; and the two-consumer projection race the version guard exists
-for never happens locally, because batches drain sequentially in one isolate. Remote
-migrations, resource creation, `wrangler secret put`, real consumer concurrency, metered usage
-and Pages itself are also unexercised.
-
----
-
-## Course-concept coverage
-
-- **Day 1** — compute, queue, database, object store, fire-and-forget, different data in
-  different shapes: Worker, Queues, D1 and R2 all doing their own job; the webhook's `202`
-  hand-off; opaque bytes in R2, relational rows in D1, keyed state in a DO.
-- **Day 2** — serverless, stateless vs stateful, CPU vs IO, concurrency: Workers throughout,
-  stateless except the ledger DO; the consumer is IO-bound (four network waits), so the 10 ms
-  CPU cap never binds; consumer concurrency is the throughput knob across orders.
-- **Day 3** — CAP, banking ledger vs like counter, lost update, CQRS: [the three consistency
-  zones](#the-three-consistency-zones), the `OrderLedger` as the CP write model, D1 reads as
-  the AP side, and [why a Durable Object](#why-a-durable-object-for-the-ledger-and-why-not-just-d1)
-  makes the lost update impossible.
-- **Day 4** — sync vs async, idempotency, retries, at-least-once, DLQ, backpressure, schema
-  evolution: the queue and everything behind it, `event_id` dedup, a consumer that throws,
-  `courier-events-dlq`, and [versioned additive events](#schema-evolution-and-the-edi-parallel).
-
----
-
-## Layout
-
-```
-src/index.ts                  Worker entry: router, CORS, both queue consumers
-src/consumer.ts               Main consumer — R2 audit, orphan path, ledger call, event rows
-src/projection.ts             The CQRS join — version-guarded DO state → D1
-src/dead-letters.ts           DLQ consumer — records poison messages in D1
-src/durable-objects/          OrderLedger — the CP write model, dedup + state machine + buffer
-
-src/api/orders.ts             Merchant order API + the projected-vs-authoritative read
-src/api/webhook.ts            POST /webhook/courier — auth, validate, enqueue, 202
-src/api/audit.ts              GET /api/orders/:id/audit — raw payload refs from R2
-src/api/dead-letters.ts       GET /api/dead-letters — the poison pile
-
-src/shared/constants.ts       Single source of truth: units, enums, derived unions
-src/shared/reconciliation.ts  The total ladder (pure function, no I/O)
-src/shared/types.ts           CourierEvent, QueuedCourierEvent, LedgerState
-src/shared/validate-event.ts  Webhook validation — forward-compatible by design
-src/shared/cors.ts            Allowlist, preflight, Vary: Origin
-
-migrations/0001_init.sql      D1 schema — orders, order_events, orphan_events. FROZEN
-migrations/0002_dead_letters.sql  The dead-letter landing table
-
-frontend/public/index.html    Console markup — dashboard, order form, order detail
-frontend/public/app.js        Console behaviour — polling, routing, rendering
-frontend/public/simulator.js  The courier simulator — real POSTs to the real webhook
-
-scripts/verify-ladder.ts      Ladder totality proof (no server needed)
-scripts/verify-convergence.mjs  Duplicates, disorder, buffer eviction, projection convergence
-scripts/verify-cors.mjs       Every console request replayed with browser headers
-scripts/verify-dlq.mjs        Poison event → dead-letter hand-off
-scripts/assert-no-phantom-ledger.mjs  An unknown order_id must spawn no ledger
-scripts/serve-frontend.mjs    Static server for the console, on its own origin
-```
+Local emulation is faithful enough to prove application logic, but three claims need a real
+account to settle: the DLQ hand-off works locally against a queue that is its own
+implementation, so Cloudflare's retry backoff won't match the ~36 seconds `verify:dlq` sees;
+`verify:cors` sends browser-shaped headers from a script rather than a browser enforcing
+same-origin; and the two-consumer projection race the version guard exists for never happens
+locally, because batches drain sequentially in one isolate. Remote migrations, resource
+creation, `wrangler secret put`, real consumer concurrency, metered usage and Pages itself are
+also unexercised.
