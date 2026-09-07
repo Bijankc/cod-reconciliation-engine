@@ -1,5 +1,14 @@
 # COD Reconciliation Engine
 
+## In plain terms
+
+A shop sells something and the customer pays cash when it arrives at the door. The courier who
+carries it collects that money and sends back reports — picked up, delivered, paid, returned —
+except those reports turn up late, in the wrong order, and sometimes the same one twice, so a
+shop that simply believes them ends up with the wrong number. This system takes all of that mess
+and works out the one true answer for each order: how much the courier actually collected, and
+whether anything about it looks wrong enough to chase.
+
 ## What this is and why
 
 An async trust layer for cash-on-delivery orders in Nepali e-commerce: it ingests late,
