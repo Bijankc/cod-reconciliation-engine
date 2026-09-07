@@ -295,7 +295,7 @@
       <section class="panel sim" id="sim-panel">
         <div class="panel__head">
           <div>
-            <p class="eyebrow">Simulator</p>
+            <p class="eyebrow">Simulator — start here</p>
             <h2 class="panel__title">Drive the courier</h2>
           </div>
           <p class="zone">posts to /webhook/courier</p>
@@ -348,8 +348,8 @@
             </div>
           </details>
 
-          <details class="sim__secret">
-            <summary>Courier credentials</summary>
+          <details class="sim__secret" open>
+            <summary>Courier credentials — needed before any event sends</summary>
             <label>
               <span>Bearer token sent with every event</span>
               <input id="sim-secret" type="text" value="${escapeHtml(readSecret())}" />

@@ -904,6 +904,11 @@ async function loadDetail(orderId) {
   const query = compareWithLedger ? "?authoritative=true" : "";
   const data = await api(`/api/orders/${encodeURIComponent(orderId)}${query}`);
 
+  // The sticky bar answers "which order is this?" once the heading has scrolled
+  // away. Written on every poll rather than only on mount, so it cannot survive
+  // into an order it does not belong to.
+  $("detail-nav-order").textContent = data.order.customer_name;
+
   if (mountedDetailFor !== orderId) {
     $("detail-body").innerHTML = detailShell(data.order);
     mountedDetailFor = orderId;
@@ -981,8 +986,15 @@ async function submitOrder(event) {
 
     const receipt = $("form-receipt");
     receipt.hidden = false;
-    receipt.innerHTML = `Order created — <code>${escapeHtml(created.order_id)}</code>.
-      <a href="#/orders/${encodeURIComponent(created.order_id)}">Open it</a>`;
+    // The order is booked, but nothing has happened to it yet — the next step is
+    // the order's own page, where the courier gets driven. So the link out is a
+    // button, not a word in a sentence.
+    receipt.innerHTML = `<span class="form-receipt__line"
+        >Order created — <code>${escapeHtml(created.order_id)}</code>. Next: open it and
+        send it some courier events.</span
+      ><a class="form-receipt__cta" href="#/orders/${encodeURIComponent(created.order_id)}"
+        >Open it &rarr;</a
+      >`;
 
     $("customer_name").value = "";
     $("cod_amount").value = "";
@@ -1022,6 +1034,8 @@ async function refresh() {
     markFresh();
   } catch (error) {
     if (error instanceof ApiError && error.status === 404 && orderId !== null) {
+      // No order was loaded, so the bar must not keep naming the last one.
+      $("detail-nav-order").textContent = "";
       $("detail-body").innerHTML = `<div class="empty">
         <strong>No such order.</strong> It may have been created against a different API.</div>`;
       markFresh();

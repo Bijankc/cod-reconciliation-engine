@@ -150,7 +150,13 @@
 
       <!-- ================= ORDER DETAIL ================= -->
       <section id="view-detail" hidden>
-        <a class="back" href="#/">&larr; Back to all orders</a>
+        <!-- The way back stays on screen. The detail page is taller than the
+             viewport once the timeline fills, and a link that scrolls away is a
+             link you have to go looking for. -->
+        <div class="detail-nav">
+          <a class="back" href="#/">&larr; All orders</a>
+          <span class="detail-nav__order" id="detail-nav-order"></span>
+        </div>
         <div id="detail-body"></div>
       </section>
     </main>

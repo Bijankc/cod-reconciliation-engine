@@ -917,6 +917,38 @@ main {
   font-size: 0.8125rem;
 }
 
+/* Guarded on :not([hidden]) — a bare `display: flex` here would outrank the
+   browser's rule for the hidden attribute and leave an empty box on the page. */
+.form-receipt:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.85rem;
+}
+
+.form-receipt__line {
+  flex: 1 1 18rem;
+}
+
+/* Sized and coloured like the submit button, because it is the same kind of
+   thing: the one action to take next. */
+.form-receipt__cta {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  color: var(--card);
+  text-decoration: none;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-tight);
+}
+
+.form-receipt__cta:hover {
+  background: var(--cp);
+  border-color: var(--cp);
+}
+
 .form-receipt code {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -925,16 +957,52 @@ main {
 /* ===========================================================================
    Detail view
    =========================================================================== */
+.detail-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 0.55rem 0 0.75rem;
+  margin-bottom: 0.4rem;
+  background: var(--paper);
+}
+
 .back {
   display: inline-block;
+  padding: 0.4rem 0.75rem;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--ink);
   text-decoration: none;
-  margin-bottom: 1.1rem;
+  background: var(--card);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-tight);
 }
 
 .back:hover {
-  text-decoration: underline;
+  color: var(--card);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* Serif, because it is the same name as the heading it stands in for. The
+   separator hangs off the name so an empty bar shows no stray mark. */
+.detail-nav__order {
+  font-family: var(--serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.detail-nav__order:not(:empty)::before {
+  content: "/";
+  margin-right: 0.7rem;
+  font-family: var(--sans);
+  font-weight: 400;
+  color: var(--ink-faint);
 }
 
 /* The name first. A merchant recognises "Deepa Maharjan"; nobody recognises a
@@ -1437,6 +1505,15 @@ main {
 
 .sim__secret {
   margin-bottom: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--cp-wash);
+  border: 1px solid var(--cp);
+  border-left-width: 3px;
+  border-radius: var(--radius-tight);
+}
+
+.sim__secret summary {
+  color: var(--cp);
 }
 
 .sim__secret p {
