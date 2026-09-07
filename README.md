@@ -27,8 +27,11 @@ A COD order shows `delivered` on one system and `returned` on another. A payment
 twice because the courier's webhook fired twice. Reconciliation is the act of arriving at one
 true answer.
 
-Everything is verified against local emulation only. I have never created a Cloudflare resource
-for it, and [Deferred to deploy](#deferred-to-deploy) says exactly what that leaves unsettled.
+It is deployed and live — the console at
+[cod-reconciliation-console.pages.dev](https://cod-reconciliation-console.pages.dev) against the
+Worker at `cod-reconciliation-engine.bijankcbhurtel.workers.dev` — and the logic is verified by
+the scripts below. [Deferred to deploy](#deferred-to-deploy) says what deploying has *not*
+settled, which is less than it was but not nothing.
 
 Four scripts stand behind the claims below:
 
@@ -330,7 +333,7 @@ gets exercised in development instead of discovered at deploy time.
 
 ```bash
 npm install
-npm run db:migrate:local     # apply 0001 + 0002 to the local emulated D1
+npm run db:migrate:local     # apply 0001-0003 to the local emulated D1
 
 # terminal 1 — the Worker: API, webhook, queue consumer, DLQ consumer, ledger
 npm run dev                  # http://127.0.0.1:8788
@@ -339,8 +342,11 @@ npm run dev                  # http://127.0.0.1:8788
 npm run frontend             # http://127.0.0.1:8789
 ```
 
-Open **http://127.0.0.1:8789**. `wrangler dev` emulates D1, Queues and Durable Objects
-together, so events really do traverse the queue and really are consumed asynchronously.
+Open **http://127.0.0.1:8789/?api=http://127.0.0.1:8788**. The `?api=` parameter is required
+for local work: the console's built-in default points at the deployed Worker, so opening
+`:8789` on its own drives the *production* API rather than the one in terminal 1. Everything
+else is the same — `wrangler dev` emulates D1, Queues and Durable Objects together, so events
+really do traverse the queue and really are consumed asynchronously.
 
 ### Driving the simulator
 
@@ -383,8 +389,18 @@ npm run db:migrate:remote
 wrangler secret put COURIER_SHARED_SECRET
 
 npm run deploy                          # the Worker
-npm run deploy:frontend                 # the Pages console
+
+# The Pages project must EXIST before the first deploy. Without this, wrangler
+# gets a 404 for the project, falls through to the Workers-assets path, and
+# fails with "Missing entry-point to Worker script" -- which says nothing about
+# the actual cause.
+wrangler pages project create cod-reconciliation-console --production-branch main
+cd frontend && wrangler pages deploy --branch main
 ```
+
+`--branch main` matters: Pages names a deployment after the branch it came from, and anything
+that isn't the production branch is a *preview*. Deploying from `master` publishes to
+`master.<project>.pages.dev` and leaves the apex `*.pages.dev` returning 404.
 
 Then add the console's real `*.pages.dev` origin to `ALLOWED_ORIGINS` in `wrangler.jsonc` and
 redeploy the Worker, or the dashboard will load and stay empty.
@@ -400,7 +416,9 @@ redeploy the Worker, or the dashboard will load and stay empty.
   serialised array, expiring `processed`, archiving settled orders) are known and not built.
 - **The courier is simulated.** The simulator makes real HTTP calls to the real webhook, so the
   ingestion path is genuine end to end, but the caller is a browser panel.
-- **Local emulation only.** No resource has ever been created on a real Cloudflare account.
+- **Deployed, but never under load.** Real resources exist and the pipeline runs end to end on
+  them, but only at the volume one person clicking a simulator produces. Nothing here has met
+  concurrency, contention or a metered limit.
 - **Audit payloads sit in a D1 table, not an object store.** That's the wrong long-term shape
   for write-once blobs — they burn row writes and inflate a relational database with data no
   query filters on — but it's fine at this scale, and it kept the system to one storage
@@ -412,11 +430,19 @@ redeploy the Worker, or the dashboard will load and stay empty.
 
 ## Deferred to deploy
 
-Local emulation is faithful enough to prove application logic, but three claims need a real
-account to settle: the DLQ hand-off works locally against a queue that is its own
-implementation, so Cloudflare's retry backoff won't match the ~36 seconds `verify:dlq` sees;
-`verify:cors` sends browser-shaped headers from a script rather than a browser enforcing
-same-origin; and the two-consumer projection race the version guard exists for never happens
-locally, because batches drain sequentially in one isolate. Remote migrations, resource
-creation, `wrangler secret put`, real consumer concurrency, metered usage and Pages itself are
-also unexercised.
+Deploying settled most of this list. Resource creation, remote migrations, `wrangler secret
+put`, the Pages deployment and the Worker itself are all done and live.
+
+**CORS is settled too.** It was deferred because `verify:cors` sends browser-shaped headers
+from a script rather than from a browser. It is now confirmed against the live deployment,
+which is the real cross-origin pair rather than a harness: the Worker returns
+`Access-Control-Allow-Origin` for the console's exact origin, answers preflight with `204` and
+the right `allow-methods` / `allow-headers`, and withholds the header entirely from an origin
+that is not on the list.
+
+Two things deploying did *not* settle, both needing load rather than an account. The **DLQ
+hand-off** has only ever been watched locally, against a queue that is its own implementation,
+so Cloudflare's real retry backoff won't match the ~36 seconds `verify:dlq` sees. And the
+**two-consumer projection race** the version guard exists for still hasn't happened: it needs
+concurrent consumers on a real backlog, where the local emulator drains batches sequentially in
+one isolate. Metered usage at volume is likewise unexercised.
