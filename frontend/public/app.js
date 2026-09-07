@@ -17,7 +17,8 @@
  */
 
 const API =
-  new URLSearchParams(location.search).get("api") ?? "http://127.0.0.1:8788";
+  new URLSearchParams(location.search).get("api") ??
+  "https://cod-reconciliation-engine.bijankcbhurtel.workers.dev";
 
 /** Slow enough to be polite, fast enough that convergence is watchable. */
 const POLL_MS = 2000;
