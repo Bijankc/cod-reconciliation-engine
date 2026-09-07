@@ -40,9 +40,9 @@ CREATE TABLE IF NOT EXISTS dead_letters (
   -- for what it is; see the README before reading anything else into it.
   dlq_attempts INTEGER,
 
-  -- The verbatim payload. R2 already holds it under the audit key, but a dead
+  -- The verbatim payload. The `audit` table already holds it (0003), but a dead
   -- letter is precisely the case where you want the bytes to hand without a
-  -- second lookup into another service.
+  -- second lookup.
   raw          TEXT,
 
   reason       TEXT NOT NULL DEFAULT 'CONSUMER_FAILED'

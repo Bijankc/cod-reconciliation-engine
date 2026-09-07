@@ -19,7 +19,8 @@ export interface CourierEvent {
 
 /**
  * What actually travels on the Queue: the validated event plus the verbatim
- * request body, so the consumer can write the original bytes to R2 without
+ * request body, so the consumer can write the original bytes to the audit log
+ * without
  * re-serialising and silently dropping unknown fields from a future schema
  * version (spec section 9, additive-only evolution).
  */

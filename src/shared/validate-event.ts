@@ -6,7 +6,8 @@
  * renames. So this validator checks that the fields it *requires* are present and
  * well-formed, and is deliberately silent about everything else. An event
  * carrying fields from a future schema version passes untouched and is stored in
- * R2 verbatim — a validator that rejected unknown fields would turn every
+ * the audit log verbatim — a validator that rejected unknown fields would turn
+ * every
  * additive change into a breaking one.
  *
  * Reuses isValidAmount() and the enum from ./constants.ts rather than restating
@@ -113,7 +114,8 @@ export function validateCourierEvent(body: unknown): ValidationResult {
   if (errors.length > 0) return { ok: false, errors };
 
   // Normalised, and carrying only the fields the pipeline acts on. The verbatim
-  // payload — unknown future fields included — is what gets written to R2.
+  // payload — unknown future fields included — is what gets stored in the audit
+  // log.
   const event: CourierEvent = {
     event_id: eventId!,
     order_id: orderId!,

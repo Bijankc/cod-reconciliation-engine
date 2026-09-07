@@ -2,7 +2,7 @@
  * POST /webhook/courier — the ingress of Zone 1 (async, disorder-tolerant).
  *
  * Does the minimum that must happen synchronously: authenticate, validate,
- * enqueue, and return 202. Everything expensive — the R2 audit write, the ledger
+ * enqueue, and return 202. Everything expensive — the audit write, the ledger
  * call, the D1 projection — happens on the consumer side. A courier waiting on
  * our database is a courier that times out and retries, which is how duplicate
  * events get made in the first place.
@@ -45,8 +45,9 @@ export async function courierWebhook(request: Request, env: Env): Promise<Respon
     return json({ error: "unauthorized" }, 401, { "www-authenticate": "Bearer" });
   }
 
-  // Read the body as text first: R2 stores the payload verbatim, so unknown
-  // fields from a future schema version survive the round trip byte for byte.
+  // Read the body as text first: the audit log stores the payload verbatim, so
+  // unknown fields from a future schema version survive the round trip byte for
+  // byte.
   const raw = await request.text();
   let body: unknown;
   try {

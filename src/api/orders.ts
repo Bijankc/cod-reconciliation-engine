@@ -54,7 +54,7 @@ interface EventRow {
   outcome: EventOutcome;
   delivery_count: number;
   courier_id: string | null;
-  raw_r2_key: string | null;
+  raw_r2_key: string | null; // 0001 column name; holds the audit row key
 }
 
 /** A row of `orphan_events` — an event that named this order before it existed. */
@@ -66,7 +66,7 @@ interface OrphanRow {
   occurred_at: string | null;
   received_at: string;
   courier_id: string | null;
-  raw_r2_key: string;
+  raw_r2_key: string; // 0001 column name; holds the audit row key
   reason: OrphanReason;
 }
 

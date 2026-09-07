@@ -87,7 +87,7 @@ if (orphans.length !== 1) {
   failures.push(`expected 1 orphan_events row for ${eventId}, found ${orphans.length}`);
 } else {
   note(`orphan_events row recorded, reason=${orphans[0].reason}`);
-  if (!orphans[0].raw_r2_key) failures.push("orphan row has no raw_r2_key — R2 audit did not run first");
+  if (!orphans[0].raw_r2_key) failures.push("orphan row has no audit reference — the audit write did not run first");
 }
 
 // 2. It did NOT become an order.

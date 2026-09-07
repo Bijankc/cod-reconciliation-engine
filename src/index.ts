@@ -4,7 +4,7 @@
  * Async AP ingestion -> CP ledger -> eventually-consistent reads.
  *
  * PHASE 4: all three zones are now wired end to end. The webhook validates and
- * enqueues (AP ingestion), the consumer audits to R2 and drives the OrderLedger
+ * enqueues (AP ingestion), the consumer audits to D1 and drives the OrderLedger
  * Durable Object (CP), and the ledger's state is projected into D1 behind a
  * version guard for the dashboard to read (eventually consistent).
  *
@@ -64,7 +64,6 @@ function health(env: Env): Response {
       queue: Boolean(env.COURIER_QUEUE),
       durable_object: Boolean(env.ORDER_LEDGER),
       d1: Boolean(env.DB),
-      r2: Boolean(env.AUDIT),
     },
   });
 }

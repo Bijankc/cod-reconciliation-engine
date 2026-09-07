@@ -3,7 +3,7 @@
  *
  * `courier-events` retries a failing message up to `max_retries` with backoff.
  * That is the right response to a TRANSIENT failure: a D1 hiccup, a cold DO, a
- * momentary R2 error. It is the wrong response to a message that will fail
+ * momentary DO overload. It is the wrong response to a message that will fail
  * identically forever, and the difference between those two cases is invisible
  * from inside a single attempt.
  *

@@ -3,9 +3,10 @@
  *
  * Per message, in this order and for these reasons:
  *
- *   1. R2 audit write FIRST, always. The audit log records everything received,
- *      valid or orphaned, before any decision is made about it. Writing it first
- *      means a crash anywhere later still leaves evidence of what arrived.
+ *   1. Audit write FIRST, always — a row in the `audit` D1 table holding the
+ *      verbatim bytes. The audit log records everything received, valid or
+ *      orphaned, before any decision is made about it. Writing it first means a
+ *      crash anywhere later still leaves evidence of what arrived.
  *   2. Confirm the order exists in D1. That same read supplies cod_amount, so
  *      the safety check and the data fetch are one round trip (Decision 5).
  *   3. Unknown order -> orphan_events + ack. Never a Durable Object call: a DO is
@@ -25,7 +26,7 @@
  * which is a system contradicting itself about money. The recoverable state
  * should be the one that does not look like a bug.
  *
- * Failure posture: transient failures (a D1 or R2 hiccup) throw, so the Queue
+ * Failure posture: transient failures (a D1 hiccup) throw, so the Queue
  * retries with backoff — at-least-once delivery is the whole point, and the DO's
  * event_id dedup is what makes reprocessing safe. Each message is acked or
  * retried INDIVIDUALLY so one bad message cannot drag its batch back through
@@ -37,11 +38,6 @@ import type { QueuedCourierEvent } from "./shared/types.ts";
 import { isPoisonEvent } from "./shared/constants.ts";
 import { projectToD1 } from "./projection.ts";
 
-/** R2 key layout, per spec 7.3. Immutable, write-once. */
-export function auditKey(orderId: string, eventId: string): string {
-  return `events/${orderId}/${eventId}.json`;
-}
-
 interface OrderLookup {
   order_id: string;
   cod_amount: number;
@@ -49,23 +45,25 @@ interface OrderLookup {
 
 async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<string> {
   const receivedAt = new Date().toISOString();
-  const key = auditKey(event.order_id, event.event_id);
 
   // 1. Audit first — the verbatim bytes the courier sent us.
-  await env.AUDIT.put(key, event.raw, {
-    httpMetadata: { contentType: "application/json" },
-    customMetadata: {
-      order_id: event.order_id,
-      event_id: event.event_id,
-      type: event.type,
-      received_at: receivedAt,
-    },
-  });
+  //
+  //    ON CONFLICT DO NOTHING, not an UPDATE: at-least-once delivery means this
+  //    runs again on a redelivery, and the audit log's claim is that it holds
+  //    what ARRIVED FIRST. A no-op on conflict is what makes write-once and
+  //    at-least-once coexist.
+  await env.DB.prepare(
+    `INSERT INTO audit (event_id, order_id, payload, received_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(event_id) DO NOTHING`,
+  )
+    .bind(event.event_id, event.order_id, event.raw, receivedAt)
+    .run();
 
   // 1b. The poison path (Phase 6). Deliberately AFTER the audit write, so the
   //     invariant above still holds: everything received leaves evidence, even
-  //     the messages designed to fail. Every retry re-writes the same R2 key
-  //     with the same bytes, which is why write-once and at-least-once coexist.
+  //     the messages designed to fail. Every retry re-runs the same insert and
+  //     changes nothing, which is why a poison message is audited exactly once.
   //
   //     This throw is what makes the dead-letter queue demonstrable. It fails
   //     identically on every attempt, so the message exhausts max_retries and
@@ -82,6 +80,10 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
     .first<OrderLookup>();
 
   // 3. Orphan path — terminal, queryable, and never routed to a DO.
+  //
+  //    `raw_r2_key` keeps its 0001 name (that migration is frozen) but no longer
+  //    holds an R2 key. It holds the audit row's key, which is the event_id: the
+  //    pointer into the audit log, in whatever store the audit log lives in.
   if (order === null) {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO orphan_events
@@ -96,7 +98,7 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
         event.occurred_at,
         receivedAt,
         event.courier_id ?? null,
-        key,
+        event.event_id,
       )
       .run();
 
@@ -146,7 +148,7 @@ async function handleMessage(event: QueuedCourierEvent, env: Env): Promise<strin
       result.outcome,
       result.deliveries,
       event.courier_id ?? null,
-      key,
+      event.event_id,
     ),
 
     // Events whose verdict the ledger just REVISED. Their rows still say

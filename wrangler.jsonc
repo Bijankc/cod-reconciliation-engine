@@ -54,11 +54,8 @@
     {
       "binding": "DB",
       "database_name": "cod-recon",
-      "database_id": "PLACEHOLDER_SET_BY_WRANGLER_D1_CREATE",
+      "database_id": "2c5d1a21-db63-4b60-b694-546522fd6522",
       "migrations_dir": "migrations"
     }
-  ],
-
-  // Immutable audit log — raw courier payloads, write-once.
-  "r2_buckets": [{ "binding": "AUDIT", "bucket_name": "cod-recon-audit" }]
+  ]
 }

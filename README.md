@@ -5,18 +5,19 @@
 An async trust layer for cash-on-delivery orders in Nepali e-commerce: it ingests late,
 duplicated, out-of-order courier events and converges every order onto a single money-truth.
 
-Workers + Queue + Durable Object + D1 + R2 + Pages, all on the Cloudflare free plan.
+Workers + Queue + Durable Object + D1 + Pages, all on the Cloudflare free plan.
 
-- **A Durable Object per order holds the ledger.** It's single-threaded, so two concurrent
-  payments can't cause a lost update; D1 alone can't serialise the decide-then-accrue step.
-- **A Queue sits in front of the ledger.** The webhook answers `202` in milliseconds, so our
-  latency never becomes the courier's timeout — and a timeout is what spawns duplicates.
-- **`event_id` is the idempotency key.** At-least-once delivery makes duplicates certain rather
-  than hypothetical.
-- **D1 for reads, R2 for the audit log.** A CQRS split: relational dashboard queries on one
-  side, write-once opaque payloads on the other.
-- **Everything that can be eventually consistent is** — the dashboard — and strong consistency
-  is spent only where the money lives, in the ledger.
+- **Durable Object per order** — the ledger is single-threaded, so two concurrent payments
+  can't cause a lost update; D1 alone can't serialise the decide-then-accrue step.
+- **A Queue in front of the ledger** — the webhook only authenticates, validates and enqueues,
+  so it returns `202` before any storage work and our latency never becomes the courier's
+  timeout, which is what spawns duplicate deliveries.
+- **`event_id` idempotency** — at-least-once delivery makes duplicates certain rather than
+  hypothetical.
+- **D1 for reads and for audit** — two separate tables: the relational read model the
+  dashboard queries, and the insert-only log of raw payloads as they arrived.
+- **Eventually consistent where it can be** — the dashboard — and strongly consistent only
+  where the money lives, in the ledger.
 
 Everything below elaborates on those five.
 
@@ -31,7 +32,7 @@ for it, and [Deferred to deploy](#deferred-to-deploy) says exactly what that lea
 
 Four scripts stand behind the claims below:
 
-| | |
+| Script | What it checks |
 |---|---|
 | `npm run verify:convergence` | **72 assertions.** A duplicate payment moves money once, `returned` before `delivery_attempted` converges, a held event that becomes impossible is evicted, and the projection matches the ledger. |
 | `npm run verify:ladder` | **28 cells.** Every status × money combination resolves, and all six verdicts are reachable. |
@@ -50,18 +51,21 @@ problem.
 
 The two demos worth watching are the two that break naive systems.
 
-**Send the same `payment_collected` twice.** A courier whose webhook call timed out retries it.
-Both deliveries are real HTTP requests carrying the same `event_id`. The ledger applies the
-first, recognises the second, and moves money once. The timeline row reads `applied · ×2` next
-to an unchanged total. A system that trusted its inbox would have booked Rs. 3,000 against a
-Rs. 1,500 order and flagged the merchant's own customer for overpayment.
+### Send the same `payment_collected` twice
 
-**Send `returned` before `delivery_attempted`.** The order has not been dispatched, so
-`returned` is illegal in that state. It's also perfectly plausible, since the dispatch event is
-presumably still in flight. The ledger holds it, the timeline shows `buffered`, and no money
-moves. When `delivery_attempted` lands, the buffer drains and both events apply in causal
-order, converging on the same answer the ledger would have reached if the courier had called in
-sequence.
+A courier whose webhook call timed out retries it. Both deliveries are real HTTP requests
+carrying the same `event_id`. The ledger applies the first, recognises the second, and moves
+money once. The timeline row reads `applied · ×2` next to an unchanged total. A system that
+trusted its inbox would have booked Rs. 3,000 against a Rs. 1,500 order and flagged the
+merchant's own customer for overpayment.
+
+### Send `returned` before `delivery_attempted`
+
+The order has not been dispatched, so `returned` is illegal in that state. It's also perfectly
+plausible, since the dispatch event is presumably still in flight. The ledger holds it, the
+timeline shows `buffered`, and no money moves. When `delivery_attempted` lands, the buffer
+drains and both events apply in causal order, converging on the same answer the ledger would
+have reached if the courier had called in sequence.
 
 Both are drivable from the console's simulator panel, which makes real authenticated POSTs to
 the courier webhook. A third button sends a deliberately poisonous event so you can watch a bad
@@ -71,7 +75,7 @@ message get set aside instead of blocking the pipeline.
 
 ## Architecture
 
-```
+```text
 Merchant ──POST /api/orders──▶ Worker ──▶ D1 (order registry, status=PENDING)
                                      └──▶ (the ledger DO is created lazily, by the first event)
 
@@ -79,7 +83,7 @@ Courier ──POST /webhook/courier──▶ Worker ──auth, validate──�
                                                                │
                                                                ▼
                                              Queue consumer (Worker)
-                                               1. raw payload → R2        (audit, always first)
+                                               1. raw payload → D1 audit table   (always first)
                                                2. does the order exist?   (D1 — orphan path if not)
                                                3. call the order's ledger
                                                                │
@@ -194,9 +198,9 @@ and the reason isn't throughput. A courier that waits on our database is a couri
 manufactures duplicates. If the webhook holds the connection open while a Durable Object wakes
 and D1 commits, our slowness becomes their timeout, and a timed-out webhook call gets retried
 because the caller has no idea whether we processed it. We'd be generating the duplicates we
-then spend correctness machinery deduplicating. Answering `202 Accepted` in milliseconds breaks
-that loop. The webhook does only what has to be synchronous: authenticate, validate the shape,
-enqueue. What the queue buys after that is at-least-once delivery (which is why `event_id`
+then spend correctness machinery deduplicating. Returning `202 Accepted` before any storage work
+breaks that loop. The webhook does only what has to be synchronous: authenticate, validate the
+shape, enqueue. What the queue buys after that is at-least-once delivery (which is why `event_id`
 dedup isn't optional), retries with backoff on transient failure (the consumer throws so the
 queue retries, and that's safe because the ledger is idempotent), backpressure during a burst,
 and a dead-letter queue after `max_retries: 5`. Malformed payloads never enter any of it. They
@@ -205,20 +209,27 @@ ones that were valid and still couldn't be processed.
 
 ---
 
-## Why D1 for reads, and R2 for the audit log
+## Why D1 for reads, and a D1 table for the audit log
 
-Three stores holding three different shapes of data. D1 is the read model because the
-dashboard's questions are relational and cross-order: every order for a merchant, newest first;
-every order currently flagged. That's one indexed query, where the same question against the
-write model is 100 Durable Object round trips per refresh out of a 100,000/day budget. R2 is
-the audit log because raw courier payloads are immutable opaque blobs, addressed by key and
-almost never read. They go to `events/{order_id}/{event_id}.json`, write-once, free egress.
-Swapping the two would be wrong in both directions: payloads in D1 would burn row writes on
-something no query filters on, and a projection in R2 would mean listing and parsing every
-object to render one table. The audit log also holds more than the D1 timeline can. The R2
-write happens *before* the order-existence check, so payloads for an order that didn't exist
-yet are still stored. And `order_events` records the ledger's verdict, while R2 holds the
-verbatim request bytes that verdict was formed from.
+D1 is the read model because the dashboard's questions are relational and cross-order: every
+order for a merchant, newest first; every order currently flagged. That's one indexed query,
+where the same question against the write model is 100 Durable Object round trips per refresh
+out of a 100,000/day budget.
+
+The raw payloads live in D1 too, in their own `audit` table (`0003`). An object store is the
+better long-term home for write-once opaque blobs and that's where I'd put this at real volume
+— but at demo volume the row-write cost of storing a payload is negligible, and keeping one
+storage primitive was simpler than standing up a second. That's the whole reason, stated
+plainly; there's no deeper argument underneath it.
+
+What does still carry weight is that the two are separate **tables**. The audit log holds more
+than the timeline can: the write happens *before* the order-existence check, so payloads for an
+order that didn't exist yet are still stored, and `order_events` has nowhere to put a row for an
+order it can't reference. And `order_events` records the ledger's verdict, while `audit` holds
+the verbatim request bytes that verdict was formed from — what we concluded and what we were
+sent, kept apart. The audit table is insert-only, `ON CONFLICT(event_id) DO NOTHING`, so a
+redelivery rewrites nothing: immutability here is a property of how it's written, not of the
+store it's written to.
 
 ---
 
@@ -248,6 +259,8 @@ late write from rewinding the read model.
   problem the Durable Object already solves.
 - **WebSockets or SSE for the dashboard.** Polling every two seconds makes replication lag
   visible, which is what the demo is about.
+- **R2 for the audit log.** The right home for write-once opaque payloads, and where I'd put
+  audit at real volume; for a demo I used a D1 table to avoid a second storage primitive.
 
 ---
 
@@ -271,8 +284,9 @@ late write from rewinding the read model.
 ## Schema evolution, and the EDI parallel
 
 The courier event carries a `schema_version` and evolution is additive-only. Adding an optional
-field is safe: the validator ignores what it doesn't recognise, and because the webhook writes
-the verbatim request bytes to R2 instead of re-serialising its parsed view, a field this build
+field is safe: the validator ignores what it doesn't recognise, and because the webhook carries
+the verbatim request bytes through to the audit table instead of re-serialising its parsed view,
+a field this build
 has never heard of still survives into the audit log intact. Removing or renaming a field is
 breaking and needs a version bump with both versions supported during the transition. This is a
 small version of the problem EDIFACT and ANSI X12 exist to solve. Two organisations that share
@@ -293,7 +307,7 @@ body, so a caller never has to guess whether it's holding truth or a copy.
 | `GET` | `/api/orders` | D1 read (AP) | Dashboard list. `?merchant_id=`, `?limit=` (default 50, max 200). |
 | `GET` | `/api/orders/:id` | D1 read (AP) | Order, event timeline, and any orphaned events that named this `order_id` before it existed. |
 | `GET` | `/api/orders/:id?authoritative=true` | **DO read (CP)** | The above plus the ledger read directly, and a `divergence` block reporting `versions_behind`. Opt-in, because it costs a DO round trip. |
-| `GET` | `/api/orders/:id/audit` | R2 list | Raw payload references. `?event_id=` returns the stored bytes verbatim. |
+| `GET` | `/api/orders/:id/audit` | D1 read | Raw payload references from the `audit` table. `?event_id=` returns the stored bytes verbatim. |
 | `GET` | `/api/dead-letters` | D1 read (AP) | Messages that failed every retry. |
 | `POST` | `/webhook/courier` | Queue producer | Bearer auth, validate, enqueue, `202`. Never touches D1 or the DO. |
 
@@ -301,8 +315,8 @@ body, so a caller never has to guess whether it's holding truth or a copy.
 
 ## Free-tier limits
 
-Everything fits the free plan comfortably: two row writes and one small R2 object per event,
-about three queue operations per event, and microseconds of Worker CPU. What binds is the
+Everything fits the free plan comfortably: three small row writes per event, about three queue
+operations per event, and microseconds of Worker CPU. What binds is the
 shared 100,000 requests/day that the Worker and the Durable Objects both spend from, which
 makes the dashboard's poll interval a real design parameter — a 1-second poll across 20 open
 dashboards is 1.7M requests/day on its own.
@@ -325,7 +339,7 @@ npm run dev                  # http://127.0.0.1:8788
 npm run frontend             # http://127.0.0.1:8789
 ```
 
-Open **http://127.0.0.1:8789**. `wrangler dev` emulates D1, R2, Queues and Durable Objects
+Open **http://127.0.0.1:8789**. `wrangler dev` emulates D1, Queues and Durable Objects
 together, so events really do traverse the queue and really are consumed asynchronously.
 
 ### Driving the simulator
@@ -363,7 +377,6 @@ npm run assert:no-phantom  # an unknown order_id must spawn no ledger
 
 ```bash
 wrangler d1 create cod-recon            # paste the id into wrangler.jsonc
-wrangler r2 bucket create cod-recon-audit
 wrangler queues create courier-events
 wrangler queues create courier-events-dlq
 npm run db:migrate:remote
@@ -388,6 +401,10 @@ redeploy the Worker, or the dashboard will load and stay empty.
 - **The courier is simulated.** The simulator makes real HTTP calls to the real webhook, so the
   ingestion path is genuine end to end, but the caller is a browser panel.
 - **Local emulation only.** No resource has ever been created on a real Cloudflare account.
+- **Audit payloads sit in a D1 table, not an object store.** That's the wrong long-term shape
+  for write-once blobs — they burn row writes and inflate a relational database with data no
+  query filters on — but it's fine at this scale, and it kept the system to one storage
+  primitive.
 - **It's a demo at the edges.** No merchant auth, no pagination, and the simulator holds the
   courier secret in the browser, so it must never be deployed with a live credential.
 

@@ -8,10 +8,8 @@ export interface Env {
   COURIER_QUEUE: Queue<QueuedCourierEvent>;
   /** One Durable Object per order — the authoritative, strongly-consistent ledger. */
   ORDER_LEDGER: DurableObjectNamespace<OrderLedger>;
-  /** Read model + order registry. */
+  /** Read model, order registry, and the audit log of raw courier payloads. */
   DB: D1Database;
-  /** Immutable audit log of raw courier payloads. */
-  AUDIT: R2Bucket;
   /** Shared secret the simulated courier presents on the webhook. */
   COURIER_SHARED_SECRET?: string;
   /** Comma-separated origins allowed to call this API from a browser. */
